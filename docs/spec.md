@@ -105,6 +105,12 @@ CREATE VIRTUAL TABLE records_fts USING fts5(
 );
 ```
 
+The authoritative schema is `migrations/0001_init.sql`. Beyond the SQL above, it:
+- makes the three tables `STRICT`, so SQLite enforces column types;
+- adds backstop CHECKs that mirror the Zod rules: the name slug, a one-line description of 1–200 characters, a body of 1–16,000 characters, and an `occurred_at` ending in `Z` or `±HH:MM`.
+
+Zod still reports these first, with the friendly messages.
+
 **Triggers**
 
 | Trigger | Effect |
