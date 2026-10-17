@@ -61,7 +61,7 @@ export async function remember(db: D1Database, raw: unknown, clock: Clock = {}):
     }
     // R1: a new name needs a known type.
     if (input.type === undefined || !types.includes(input.type)) {
-      throw new BankError(`type must be one of: ${types.join(", ")}`);
+      throw new BankError(`type: must be one of: ${types.join(", ")}`);
     }
     type = input.type;
   }

@@ -31,7 +31,7 @@ describe("list_topics", () => {
   it("filters by type and checks the type", async () => {
     const { topics } = await listTopics(db, { type: "log" });
     expect(topics.map((t) => t.name)).toEqual(["meals"]);
-    await expect(listTopics(db, { type: "health" })).rejects.toThrow("type must be one of:");
+    await expect(listTopics(db, { type: "health" })).rejects.toThrow("type: must be one of:");
   });
 
   it("pages with nothing skipped or repeated", async () => {

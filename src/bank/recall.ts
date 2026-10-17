@@ -101,7 +101,7 @@ async function recallByFilters(db: D1Database, input: RecallInput): Promise<Reca
   }
   if (input.type !== undefined) {
     const types = await typeNames(db);
-    if (!types.includes(input.type)) throw new BankError(`type must be one of: ${types.join(", ")}`);
+    if (!types.includes(input.type)) throw new BankError(`type: must be one of: ${types.join(", ")}`);
   }
   const after = input.after !== undefined ? millisToUtcText(wallClockToMillis(input.after)!) : undefined;
   const before = input.before !== undefined ? millisToUtcText(wallClockToMillis(input.before)!) : undefined;

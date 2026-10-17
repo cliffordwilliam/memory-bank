@@ -38,8 +38,8 @@ describe("remember", () => {
 
   it("R1: a new name needs a known type", async () => {
     const base = { name: uniqueName(), new_name: true, description: "d", body: "b", occurred_at: "2026-10-15T21:00:00+07:00" };
-    await expect(rememberRaw(base)).rejects.toThrow("type must be one of: feedback, log, project, reference, user");
-    await expect(rememberRaw({ ...base, type: "health" })).rejects.toThrow("type must be one of:");
+    await expect(rememberRaw(base)).rejects.toThrow("type: must be one of: feedback, log, project, reference, user");
+    await expect(rememberRaw({ ...base, type: "health" })).rejects.toThrow("type: must be one of:");
   });
 
   it("R2: an unknown name is refused, listing the existing names", async () => {
@@ -79,7 +79,7 @@ describe("remember", () => {
     ["space instead of T", "2026-10-15 21:00:00+07:00"],
   ])("R5: refuses occurred_at with %s", async (_, occurred_at) => {
     await expect(save({ name: uniqueName(), occurred_at })).rejects.toThrow(
-      "occurred_at must be a real wall-clock time with offset, e.g. 2026-10-12T21:00:00+07:00",
+      "occurred_at: must be a real wall-clock time with offset, e.g. 2026-10-12T21:00:00+07:00",
     );
   });
 
@@ -99,16 +99,16 @@ describe("remember", () => {
 
   it("R7: checks the name, description and body", async () => {
     await expect(save({ name: "My Meds" })).rejects.toThrow(
-      "name must be lowercase letters, digits and hyphens (1–64), e.g. vanilla-cupcakes",
+      "name: must be lowercase letters, digits and hyphens (1–64 characters), e.g. vanilla-cupcakes",
     );
     await expect(save({ name: uniqueName(), description: "two\nlines" })).rejects.toThrow(
-      "description must be one line of at most 200 characters",
+      "description: must be one line of at most 200 characters",
     );
     await expect(save({ name: uniqueName(), description: "x".repeat(201) })).rejects.toThrow(
-      "description must be one line of at most 200 characters",
+      "description: must be one line of at most 200 characters",
     );
     await expect(save({ name: uniqueName(), body: "x".repeat(17_240) })).rejects.toThrow(
-      "body is 17240 characters; the limit is 16000",
+      "body: is 17240 characters; the limit is 16000",
     );
     await expect(save({ name: uniqueName(), body: "x".repeat(16_000) })).resolves.toBeDefined();
   });
@@ -117,11 +117,11 @@ describe("remember", () => {
     const name = uniqueName();
     const wrong = await save({ name });
     await expect(save({ name, corrects: wrong.id })).rejects.toThrow(
-      "kind is required with corrects: correction or retraction",
+      "kind: is required with corrects (correction or retraction)",
     );
-    await expect(save({ name, kind: "correction" })).rejects.toThrow("kind needs corrects");
+    await expect(save({ name, kind: "correction" })).rejects.toThrow("kind: needs corrects");
     await expect(save({ name, corrects: wrong.id, kind: "redaction" })).rejects.toThrow(
-      "kind is correction or retraction",
+      "kind: must be correction or retraction",
     );
   });
 
@@ -154,7 +154,7 @@ describe("remember", () => {
   it("reports several problems at once", async () => {
     await expect(
       rememberRaw({ name: "Bad Name", description: "", body: "b", occurred_at: "yesterday" }),
-    ).rejects.toThrow(/name must be.*; description can't be empty; occurred_at must be/);
+    ).rejects.toThrow(/name: must be.*; description: can't be empty; occurred_at: must be/);
   });
 });
 
@@ -168,7 +168,7 @@ describe("recall rules", () => {
     await expect(recall(db, { ids: [1], name: "meals" })).rejects.toThrow(
       "ids can't be combined with other filters (got name)",
     );
-    await expect(recall(db, { ids: [1, 2, 3, 4] })).rejects.toThrow("ids takes at most 3 ids");
+    await expect(recall(db, { ids: [1, 2, 3, 4] })).rejects.toThrow("ids: takes 1 to 3 ids");
   });
 
   it("R13: relevance needs a query", async () => {
@@ -178,11 +178,11 @@ describe("recall rules", () => {
   });
 
   it("checks the type, the time range and the keywords", async () => {
-    await expect(recall(db, { type: "health" })).rejects.toThrow("type must be one of:");
+    await expect(recall(db, { type: "health" })).rejects.toThrow("type: must be one of:");
     await expect(
       recall(db, { after: "2026-10-16T00:00:00+07:00", before: "2026-10-15T00:00:00+07:00" }),
     ).rejects.toThrow("after must be earlier than before");
-    await expect(recall(db, { before: "2026-02-30T00:00:00Z" })).rejects.toThrow("before must be a real wall-clock time");
+    await expect(recall(db, { before: "2026-02-30T00:00:00Z" })).rejects.toThrow("before: must be a real wall-clock time");
     await expect(recall(db, { query: " - ? " })).rejects.toThrow("query needs at least one keyword");
     await expect(recall(db, { order: "newest" })).rejects.toThrow(/Unrecognized key.*order/);
   });

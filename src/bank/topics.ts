@@ -28,7 +28,7 @@ export async function listTopics(db: D1Database, raw: unknown): Promise<ListTopi
 
   if (input.type !== undefined) {
     const types = await typeNames(db);
-    if (!types.includes(input.type)) throw new BankError(`type must be one of: ${types.join(", ")}`);
+    if (!types.includes(input.type)) throw new BankError(`type: must be one of: ${types.join(", ")}`);
   }
 
   const fingerprint = JSON.stringify(["topics", input.type]);

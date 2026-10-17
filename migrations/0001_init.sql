@@ -117,6 +117,6 @@ END;
 INSERT INTO types (name, description) VALUES
   ('user',      'Lasting facts about the user: background, tastes, health conditions, current medication list. Not dated happenings (log) and not rules for Claude (feedback). Each new record restates the whole current fact.'),
   ('feedback',  'Rules for how Claude should respond or work: corrections, style rules, approaches the user confirmed. Phrased as an instruction to Claude. Each new record restates the whole rule.'),
-  ('project',   'An ongoing effort: goal, decisions, status, next steps. The head is the current state, so each new record restates the whole current state, not just the change.'),
+  ('project',   'An ongoing effort: goal, decisions, status, next steps. The latest record is the current state, so each new record restates the whole current state, not just the change.'),
   ('reference', 'Material to keep and look up later: recipes, instructions, how-tos, where things are. One specific name per item (vanilla-cupcakes, not cupcake-recipe). Each new record is the whole new version.'),
   ('log',       'Things that happened, one record per occurrence: a meal, a dose, a workout, a symptom. Reuse the series'' existing name (meals, medication).');

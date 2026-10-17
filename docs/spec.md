@@ -234,6 +234,9 @@ The description also tells Claude:
 - **`recall(ids)` reports `missing_ids`** for ids that don't exist, and returns the rest in id order.
 - **A `page_token` belongs to its filters.** Reusing it with different filters, or sending a broken one, is an error that says to start again.
 - **Paging continues after the previous page's last row** for `occurred_at` and `created_at`, so records saved while paging don't shift the pages. `relevance` pages by position, since its ranking can change as records are added.
+- **Argument errors start with the field name,** e.g. `occurred_at: must be a real wall-clock time with offset, …`. The MCP SDK validates calls with the same Zod schemas and adds `Input validation error: Invalid arguments for tool remember:` in front. Errors from the bank's own rules (R1–R4, R6, R9–R13) come back as written.
+- **Stored text is escaped** (`<` as `\u003c` inside the JSON), so a record can't close the `<bank_data>` wrapper and pose as instructions.
+- **Requests must carry a matching `Host`,** and browser requests an allowed `Origin`. This is the MCP handler's DNS-rebinding protection; localhost and the Worker's own `workers.dev` name are allowed.
 - **Optional fields are left out when empty:** `corrects`, `kind`, `corrected_by`, `corrected_kind`, `modified_at` and `body_truncated` appear only when they apply.
 
 ### 7.3 `list_topics`: the index (like `MEMORY.md`)
