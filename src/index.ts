@@ -22,12 +22,29 @@ import { createBankServer } from "./mcp";
  */
 const bankApi = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const allowed = readConfig(env).allowedGithubId;
+    const { allowedGithubId, publicUrl } = readConfig(env);
     const props = (ctx as ExecutionContext & { props?: Partial<Props> }).props;
-    if (props?.githubId !== allowed) return new Response("Forbidden", { status: 403 });
+    if (props?.githubId !== allowedGithubId) return revokedToken(publicUrl);
     return createMcpHandler(() => createBankServer(env.DB))(request, env, ctx);
   },
 };
+
+/**
+ * A token whose account is no longer allowed counts as revoked: 401 with
+ * invalid_token (RFC 6750 §3.1), pointing at the same discovery document as
+ * the library's own 401s. Clients then start a fresh login, which ends at
+ * GitHub's callback with "This memory bank belongs to someone else", rather
+ * than stopping at a 403 they can't act on. No token is issued, so no loop.
+ */
+function revokedToken(publicUrl: string): Response {
+  const metadata = `${publicUrl}/.well-known/oauth-protected-resource/mcp`;
+  return new Response("This token's account is no longer allowed.", {
+    status: 401,
+    headers: {
+      "www-authenticate": `Bearer realm="OAuth", error="invalid_token", error_description="account no longer allowed", resource_metadata="${metadata}"`,
+    },
+  });
+}
 
 // The provider's settings depend on PUBLIC_URL, so it's built on the first
 // request (once per Worker instance) rather than at import time.
