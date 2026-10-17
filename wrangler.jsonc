@@ -22,9 +22,9 @@
     {
       "binding": "DB",
       "database_name": "memory-bank",
-      // Placeholder until phase 6 creates the real database. Local dev and
-      // tests only need the binding name.
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      // The real database (created in phase 6). Local dev and tests use a
+      // local copy under .wrangler/ and only need the binding name.
+      "database_id": "774a679a-f56e-4e7b-bebe-f82d40b22d54",
       "migrations_dir": "migrations"
     }
   ],
@@ -32,8 +32,7 @@
     {
       // OAuth state: clients, grants and tokens (hashed), consent handles.
       "binding": "OAUTH_KV",
-      // Placeholder until phase 6 creates the real namespace.
-      "id": "00000000000000000000000000000000"
+      "id": "0b42c438e5d7421d915ab09930244657"
     }
   ]
 }
