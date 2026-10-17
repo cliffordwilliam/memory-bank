@@ -1,0 +1,9 @@
+# Copy to .dev.vars (never committed) for `npm run dev`. Only the settings
+# listed in wrangler.jsonc ("secrets.required") are read from this file.
+# The origin wrangler dev serves on:
+PUBLIC_URL=http://localhost:8787
+# From the "dev" GitHub OAuth app (callback http://localhost:8787/callback):
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+# Your numeric GitHub user id: https://api.github.com/users/<your-login> → "id"
+ALLOWED_GITHUB_ID=

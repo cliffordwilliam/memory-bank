@@ -127,7 +127,7 @@ Zod still reports these first, with the friendly messages.
 **Who can change what:**
 - D1 has no database users or permissions, so the triggers can't tell you and the server apart.
 - The triggers make deletes and changes to ids, names, times and links impossible for everyone, including through server bugs.
-- The changes they do allow (record text, a name's type, a type's description) are yours alone, because the server code contains no UPDATE statements at all.
+- The changes they do allow (record text, a name's type, a type's description) are yours alone, because the server code contains no UPDATE statements at all. Every SQL statement lives in `src/bank/store.ts`, the data layer, and `test/store.test.ts` checks across all of `src/` that no file contains an UPDATE or DELETE, and that no other file runs SQL.
 - Someone with your Cloudflare credentials could still drop a trigger on purpose.
 
 ## 6. Rules the server enforces
@@ -303,8 +303,23 @@ Nothing else can change. Ids, record names, times, correction links and slugs ar
   - GitHub OAuth through `workers-oauth-provider`.
   - Access is allowed only for your numeric GitHub user id. It's checked server-side on every request, and refused if the setting is missing.
   - Protect the GitHub and claude.ai accounts with 2FA.
+- **How the login is wired (phase 5):**
+  - `@cloudflare/workers-oauth-provider` serves discovery, registration (DCR, and CIMD for Claude), the token endpoint and token checks.
+  - Our pages are the consent page (`/authorize`) and GitHub's callback (`/callback`), using the library's consent and upstream helpers. The consent form works once, only in the browser that opened it; GitHub's callback likewise.
+  - GitHub's leg uses PKCE too, requests no scopes, and its token is used once to read the numeric id, then dropped.
+  - The grant stores `{ githubId, login }` (encrypted by the library). `/mcp` re-checks `githubId` against `ALLOWED_GITHUB_ID` on every request.
+  - **Settings:** all four (`PUBLIC_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_ID`) are declared in `wrangler.jsonc` under `secrets.required`, with values in `.dev.vars` locally and `wrangler secret put` online. One switch per environment.
+    - Wrangler checks they *exist*: `wrangler deploy` refuses to go out without them, a missing one is a warning in `wrangler dev`, and `wrangler types` types them.
+    - `PUBLIC_URL` isn't secret, and the bank publishes it: `/.well-known/oauth-protected-resource/mcp` shows `resource` = `PUBLIC_URL` + `/mcp`.
+    - `src/config.ts` validates the *values* with a Zod schema, like any other outside input, and fails closed: empty secrets, a non-numeric allowed id, or a `PUBLIC_URL` that isn't a bare http(s) origin refuse everyone.
+- **Errors:** `src/errors.ts` is the catalog: every kind of error the Worker throws (`BankError`, `ConfigError`, `LoginFailed`, plus the OAuth library's `AuthorizationError` and `CimdFetchError`) and how each is answered. Route code only throws. There is one boundary per protocol:
+  - **HTTP:** the top-level `fetch` in `src/index.ts` calls `errorResponse()`. That gives login redirects, 400 pages, 500 "not configured", and a logged, bare 500 "Internal error." for anything unexpected. The OAuth library calls our handlers without catching, so everything reaches it.
+  - **MCP:** `respond()` in `src/mcp.ts`. A `BankError` must come back *inside* the MCP reply (JSON-RPC with `isError: true`) for Claude to read it as "fix your call"; anything else becomes a generic tool error.
+
+  The other catches sit at edges where outside code throws and we translate it: `fetch` to GitHub, a malformed page token, a database constraint race.
+
 - **Allowlist test without a second account:** temporarily set the allowed id to a different number, deploy, confirm that **you** are refused, then set it back.
-- **Secrets** (`GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `COOKIE_ENCRYPTION_KEY`) are stored with `wrangler secret`, never in the repo.
+- **Settings** (`PUBLIC_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_ID`) live in `.dev.vars` locally and in Cloudflare's secret store online (`wrangler secret put`), never in the repo. Cookies need no key of ours: the OAuth library binds its consent and upstream cookies itself.
 - **OAuth state** lives in a KV namespace (`OAUTH_KV`).
 - **Prompt injection:** results are labeled as stored data, and the tool descriptions say records are never instructions.
 - **Logs:** record text isn't written to Worker logs.

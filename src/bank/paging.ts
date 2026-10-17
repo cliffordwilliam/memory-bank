@@ -2,7 +2,7 @@
 // where the previous page ended plus a fingerprint of the filters, so a token
 // can't be reused with different filters by mistake.
 
-import { BankError } from "./errors";
+import { BankError } from "../errors";
 
 export interface PageState {
   /** Fingerprint of the filters that produced the page. */

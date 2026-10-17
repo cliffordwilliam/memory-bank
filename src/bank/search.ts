@@ -3,7 +3,7 @@
 // string. Quoting every word makes each one a plain term; OR between them
 // means filler words can't cause zero results, and bm25 ranks the matches.
 
-import { BankError } from "./errors";
+import { BankError } from "../errors";
 
 const MAX_KEYWORDS = 20;
 

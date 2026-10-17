@@ -3,7 +3,21 @@
   "name": "memory-bank",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-01",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": [
+    "nodejs_compat",
+    // Needed for Client ID Metadata Documents: outbound fetches of a client's
+    // metadata can only reach public addresses (SSRF protection).
+    "global_fetch_strictly_public"
+  ],
+  // Settings: only the names live here. Values come from .dev.vars locally
+  // and from `wrangler secret put` online. `wrangler deploy` refuses to go out
+  // while any is missing; locally a missing one is only a warning, so
+  // src/config.ts still refuses at runtime. PUBLIC_URL isn't secret, but
+  // keeping every setting in one place means one switch per environment; the
+  // bank publishes it anyway at /.well-known/oauth-protected-resource/mcp.
+  "secrets": {
+    "required": ["PUBLIC_URL", "GITHUB_CLIENT_ID", "GITHUB_CLIENT_SECRET", "ALLOWED_GITHUB_ID"]
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -12,6 +26,14 @@
       // tests only need the binding name.
       "database_id": "00000000-0000-0000-0000-000000000000",
       "migrations_dir": "migrations"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      // OAuth state: clients, grants and tokens (hashed), consent handles.
+      "binding": "OAUTH_KV",
+      // Placeholder until phase 6 creates the real namespace.
+      "id": "00000000000000000000000000000000"
     }
   ]
 }

@@ -1,26 +1,12 @@
 // list_topics: the index of names, like MEMORY.md (spec §7.3).
 
-import { BankError } from "./errors";
-import { typeNames } from "./lookups";
+import { BankError } from "../errors";
 import { decodePageToken, encodePageToken } from "./paging";
+import type { ListTopicsResult } from "./results";
 import { listTopicsInput, parse } from "./schemas";
+import { queryTopics, typeNames } from "./store";
 
 const DEFAULT_MAX_RESULTS = 50;
-
-export interface Topic {
-  name: string;
-  type: string;
-  record_count: number;
-  latest_id: number | null;
-  latest_occurred_at: string | null;
-  latest_description: string | null;
-}
-
-export interface ListTopicsResult {
-  topics: Topic[];
-  total: number;
-  next_page_token?: string;
-}
 
 export async function listTopics(db: D1Database, raw: unknown): Promise<ListTopicsResult> {
   const input = parse(listTopicsInput, raw);
@@ -35,40 +21,11 @@ export async function listTopics(db: D1Database, raw: unknown): Promise<ListTopi
   const page = input.page_token ? decodePageToken(input.page_token, fingerprint) : undefined;
 
   // Newest activity first (highest latest_id); names break ties so paging is exact.
-  const where: string[] = [];
-  const params: unknown[] = [];
-  if (input.type !== undefined) (where.push("n.type = ?"), params.push(input.type));
-  const pageWhere: string[] = [];
-  const pageParams: unknown[] = [];
-  if (page?.after) {
-    const [name, latest] = page.after;
-    pageWhere.push("(t.sort_id < ? OR (t.sort_id = ? AND t.name > ?))");
-    pageParams.push(latest, latest, name);
-  }
-
-  const summary = `
-    SELECT n.name, n.type, count(r.id) AS record_count, max(r.id) AS latest_id,
-           coalesce(max(r.id), 0) AS sort_id
-    FROM names n LEFT JOIN records r ON r.name = n.name
-    ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
-    GROUP BY n.name`;
-
-  const [countResult, pageResult] = await db.batch<{ total: number } | Topic & { sort_id: number }>([
-    db.prepare(`SELECT count(*) AS total FROM names n ${where.length ? `WHERE ${where.join(" AND ")}` : ""}`).bind(...params),
-    db
-      .prepare(
-        `WITH t AS (${summary})
-         SELECT t.name, t.type, t.record_count, t.latest_id, t.sort_id,
-                l.occurred_at AS latest_occurred_at, l.description AS latest_description
-         FROM t LEFT JOIN records l ON l.id = t.latest_id
-         ${pageWhere.length ? `WHERE ${pageWhere.join(" AND ")}` : ""}
-         ORDER BY t.sort_id DESC, t.name
-         LIMIT ?`,
-      )
-      .bind(...params, ...pageParams, maxResults + 1),
-  ]);
-  const total = (countResult!.results[0] as { total: number }).total;
-  const rows = pageResult!.results as (Topic & { sort_id: number })[];
+  const { total, rows } = await queryTopics(db, {
+    type: input.type,
+    limit: maxResults + 1,
+    after: page?.after as [string, number] | undefined,
+  });
 
   const pageRows = rows.slice(0, maxResults);
   const last = pageRows[pageRows.length - 1];

@@ -2,18 +2,26 @@
 // JSON-RPC to the Worker's real fetch handler (no network) and reads the
 // response, like FastAPI's TestClient. Its own file, so the bank starts empty.
 import { env, exports } from "cloudflare:workers";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
+import { ownerTokens } from "./oauth";
+
+// /mcp needs a token since phase 5: log in once, as the owner, for the whole file.
+let auth: Record<string, string> = {};
+beforeAll(async () => {
+  auth = { authorization: `Bearer ${(await ownerTokens()).access_token}` };
+});
 
 let nextId = 1;
 
 /** Posts one JSON-RPC request to /mcp and returns the parsed response. */
 async function rpc(method: string, params?: unknown): Promise<{ result?: any; error?: any }> {
   const response = await exports.default.fetch(
-    new Request("http://localhost/mcp", {
+    new Request("http://localhost:8787/mcp", {
       method: "POST",
       headers: {
         // Real HTTP requests always carry Host; the handler checks it (DNS-rebinding protection).
-        host: "localhost",
+        host: "localhost:8787",
+        ...auth,
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
         "mcp-protocol-version": "2025-11-25",
@@ -37,10 +45,11 @@ async function rpc(method: string, params?: unknown): Promise<{ result?: any; er
 async function modernRpc(method: string, params: Record<string, unknown> = {}): Promise<{ result?: any; error?: any }> {
   const name = typeof params.name === "string" ? params.name : undefined;
   const response = await exports.default.fetch(
-    new Request("http://localhost/mcp", {
+    new Request("http://localhost:8787/mcp", {
       method: "POST",
       headers: {
-        host: "localhost",
+        host: "localhost:8787",
+        ...auth,
         "content-type": "application/json",
         accept: "application/json, text/event-stream",
         "mcp-protocol-version": "2026-07-28",
@@ -197,12 +206,12 @@ describe("MCP over HTTP", () => {
 
   it.each([
     ["a foreign Host", { host: "evil.example.com" }],
-    ["a browser Origin from another site", { host: "localhost", origin: "https://evil.example.com" }],
+    ["a browser Origin from another site", { host: "localhost:8787", origin: "https://evil.example.com" }],
   ])("refuses requests with %s", async (_, extra) => {
     const response = await exports.default.fetch(
-      new Request("http://localhost/mcp", {
+      new Request("http://localhost:8787/mcp", {
         method: "POST",
-        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...extra },
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...auth, ...extra },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }),
       }),
     );
@@ -244,8 +253,10 @@ describe("MCP over HTTP", () => {
     });
   });
 
-  it("answers only at /mcp", async () => {
-    const response = await exports.default.fetch(new Request("http://localhost/", { headers: { host: "localhost" } }));
+  it("has no other routes beyond the login pages", async () => {
+    const response = await exports.default.fetch(
+      new Request("http://localhost:8787/nothing-here", { headers: { host: "localhost:8787" } }),
+    );
     expect(response.status).toBe(404);
   });
 });

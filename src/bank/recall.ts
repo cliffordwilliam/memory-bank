@@ -1,65 +1,19 @@
 // recall: read records, like a GET with filters and pages (spec §7.2).
 // Nothing is hidden: wrong records come back too, marked with corrected_by.
 
-import { BankError } from "./errors";
-import { describeNames, getName, typeNames } from "./lookups";
+import { BankError } from "../errors";
+import { describeNames } from "./lookups";
 import { decodePageToken, encodePageToken, type PageState } from "./paging";
+import type { RecalledRecord, RecallResult } from "./results";
 import { parse, recallInput, type RecallInput } from "./schemas";
 import { toFtsQuery } from "./search";
+import { getName, queryRecords, recordsByIds, type RecordRow, typeNames } from "./store";
 import { millisToUtcText, wallClockToMillis } from "./time";
 
 const DEFAULT_MAX_RESULTS = 10;
 /** Pages with more records than this get their bodies cut short. */
 const FULL_BODY_LIMIT = 3;
 const TRUNCATED_BODY = 500;
-
-export interface RecalledRecord {
-  id: number;
-  name: string;
-  type: string;
-  description: string;
-  body: string;
-  body_truncated?: true;
-  occurred_at: string;
-  created_at: string;
-  corrects?: number;
-  kind?: string;
-  corrected_by?: number;
-  corrected_kind?: string;
-  modified_at?: string;
-}
-
-export interface RecallResult {
-  records: RecalledRecord[];
-  total: number;
-  next_page_token?: string;
-  missing_ids?: number[];
-}
-
-interface Row {
-  id: number;
-  name: string;
-  type: string;
-  description: string;
-  body: string;
-  occurred_at: string;
-  occurred_at_utc: string;
-  created_at: string;
-  modified_at: string | null;
-  corrects: number | null;
-  kind: string | null;
-  corrected_by: number | null;
-  corrected_kind: string | null;
-}
-
-const COLUMNS = `
-  r.id, r.name, n.type, r.description, r.body, r.occurred_at, r.occurred_at_utc,
-  r.created_at, r.modified_at, r.corrects, r.kind,
-  c.id AS corrected_by, c.kind AS corrected_kind`;
-
-const JOINS = `
-  JOIN names n ON n.name = r.name
-  LEFT JOIN records c ON c.corrects = r.id`;
 
 export async function recall(db: D1Database, raw: unknown): Promise<RecallResult> {
   const input = parse(recallInput, raw);
@@ -73,10 +27,7 @@ async function recallByIds(db: D1Database, input: RecallInput): Promise<RecallRe
     throw new BankError(`ids can't be combined with other filters (got ${others.join(", ")})`);
   }
   const ids = [...new Set(input.ids!)];
-  const { results } = await db
-    .prepare(`SELECT ${COLUMNS} FROM records r ${JOINS} WHERE r.id IN (${ids.map(() => "?").join(", ")}) ORDER BY r.id`)
-    .bind(...ids)
-    .all<Row>();
+  const results = await recordsByIds(db, ids);
   const found = new Set(results.map((row) => row.id));
   const missing = ids.filter((id) => !found.has(id));
   return {
@@ -110,54 +61,22 @@ async function recallByFilters(db: D1Database, input: RecallInput): Promise<Reca
   }
   const fts = input.query !== undefined ? toFtsQuery(input.query) : undefined;
 
-  const from = fts ? `records_fts JOIN records r ON r.id = records_fts.rowid ${JOINS}` : `records r ${JOINS}`;
-  const where: string[] = [];
-  const params: unknown[] = [];
-  if (fts) (where.push("records_fts MATCH ?"), params.push(fts));
-  if (input.name !== undefined) (where.push("r.name = ?"), params.push(input.name));
-  if (input.type !== undefined) (where.push("n.type = ?"), params.push(input.type));
-  if (after !== undefined) (where.push("r.occurred_at_utc >= ?"), params.push(after));
-  if (before !== undefined) (where.push("r.occurred_at_utc < ?"), params.push(before));
-
   const fingerprint = JSON.stringify([fts, input.name, input.type, after, before, orderBy, direction]);
   const page: PageState | undefined = input.page_token ? decodePageToken(input.page_token, fingerprint) : undefined;
+  const offset = page?.offset ?? 0;
 
-  // Sorting, and where the next page continues. Ties always break by id in
-  // the same direction, so every position is unique.
-  const desc = direction === "newest";
-  const cmp = desc ? "<" : ">";
-  const pageWhere = [...where];
-  const pageParams = [...params];
-  let order: string;
-  let offset = 0;
-  if (orderBy === "relevance") {
-    order = "records_fts.rank, r.id DESC";
-    offset = page?.offset ?? 0;
-  } else if (orderBy === "occurred_at") {
-    order = `r.occurred_at_utc ${desc ? "DESC" : "ASC"}, r.id ${desc ? "DESC" : "ASC"}`;
-    if (page?.after) {
-      const [time, id] = page.after;
-      pageWhere.push(`(r.occurred_at_utc ${cmp} ? OR (r.occurred_at_utc = ? AND r.id ${cmp} ?))`);
-      pageParams.push(time, time, id);
-    }
-  } else {
-    // created_at: save order, which is id order.
-    order = `r.id ${desc ? "DESC" : "ASC"}`;
-    if (page?.after) {
-      pageWhere.push(`r.id ${cmp} ?`);
-      pageParams.push(page.after[1]);
-    }
-  }
-
-  const whereSql = (clauses: string[]) => (clauses.length ? `WHERE ${clauses.join(" AND ")}` : "");
-  const [countResult, pageResult] = await db.batch<Row | { total: number }>([
-    db.prepare(`SELECT count(*) AS total FROM ${from} ${whereSql(where)}`).bind(...params),
-    db
-      .prepare(`SELECT ${COLUMNS} FROM ${from} ${whereSql(pageWhere)} ORDER BY ${order} LIMIT ? OFFSET ?`)
-      .bind(...pageParams, maxResults + 1, offset),
-  ]);
-  const total = (countResult!.results[0] as { total: number }).total;
-  const rows = pageResult!.results as Row[];
+  const { total, rows } = await queryRecords(db, {
+    fts,
+    name: input.name,
+    type: input.type,
+    afterUtc: after,
+    beforeUtc: before,
+    orderBy,
+    direction,
+    limit: maxResults + 1, // one extra, to know whether there's a next page
+    after: page?.after,
+    offset,
+  });
 
   const hasMore = rows.length > maxResults;
   const pageRows = rows.slice(0, maxResults);
@@ -179,7 +98,7 @@ async function recallByFilters(db: D1Database, input: RecallInput): Promise<Reca
   };
 }
 
-function toRecord(row: Row, truncate: boolean): RecalledRecord {
+function toRecord(row: RecordRow, truncate: boolean): RecalledRecord {
   const cut = truncate && row.body.length > TRUNCATED_BODY;
   return {
     id: row.id,

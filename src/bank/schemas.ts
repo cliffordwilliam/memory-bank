@@ -9,7 +9,7 @@
 // the SDK and parse() below put it in front ("name: must be …").
 
 import { z } from "zod";
-import { BankError } from "./errors";
+import { BankError } from "../errors";
 import { WALL_CLOCK_EXAMPLE, wallClockToMillis } from "./time";
 
 export const MAX_BODY = 16_000;

@@ -9,7 +9,8 @@ import {
   recall,
   remember,
 } from "./bank";
-import { listTopicsTool, recallTool, rememberTool, type TypeInfo } from "./bank/schemas";
+import { listTopicsTool, recallTool, rememberTool } from "./bank/schemas";
+import { types as storeTypes } from "./bank/store";
 
 const VERSION = "0.1.0";
 
@@ -54,9 +55,7 @@ const DATA_LABEL =
 
 /** Builds the MCP server for one request. */
 export async function createBankServer(db: D1Database): Promise<McpServer> {
-  const { results: types } = await db
-    .prepare("SELECT name, description FROM types ORDER BY name")
-    .all<TypeInfo>();
+  const types = await storeTypes(db);
 
   const server = new McpServer(
     { name: "memory-bank", version: VERSION },
@@ -103,8 +102,9 @@ export async function createBankServer(db: D1Database): Promise<McpServer> {
 }
 
 /**
- * Runs an operation and shapes the tool result. BankErrors go back to Claude
- * as fixable tool errors; anything else is a bug and stays out of the reply.
+ * The MCP boundary (see src/errors.ts): runs an operation and shapes the tool
+ * result. BankErrors go back to Claude as fixable tool errors, inside the MCP
+ * reply; anything else is a bug and stays out of the reply.
  */
 async function respond(run: () => Promise<unknown>, storedData: boolean) {
   try {

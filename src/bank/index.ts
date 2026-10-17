@@ -1,5 +1,7 @@
 // The bank's three operations, independent of MCP and login (phase 3).
-export { BankError } from "./errors";
-export { listTopics, type ListTopicsResult, type Topic } from "./topics";
-export { recall, type RecalledRecord, type RecallResult } from "./recall";
-export { remember, type RememberResult } from "./remember";
+// Their contract: inputs in ./schemas.ts, outputs in ./results.ts.
+export { BankError } from "../errors";
+export type { Kind, ListTopicsResult, RecalledRecord, RecallResult, RememberResult, Topic } from "./results";
+export { listTopics } from "./topics";
+export { recall } from "./recall";
+export { remember } from "./remember";

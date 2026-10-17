@@ -2,24 +2,15 @@
 // this checks what needs the database (R1–R4, R9, R10) and inserts the name
 // (if new) and the record in one batch, so either both land or neither does.
 
-import { BankError } from "./errors";
-import { describeNames, getName, typeNames } from "./lookups";
+import { BankError } from "../errors";
+import { describeNames } from "./lookups";
+import type { RememberResult } from "./results";
 import { parse, rememberInput } from "./schemas";
+import { correctionTarget, getName, insertRecord, previousId, typeNames } from "./store";
 import { wallClockToMillis } from "./time";
 
 /** Slack for clock differences and Claude rounding "just now" up (R6). */
 const FUTURE_SLACK_MS = 5 * 60_000;
-
-export interface RememberResult {
-  id: number;
-  name: string;
-  type: string;
-  occurred_at: string;
-  created_at: string;
-  previous_id: number | null;
-  corrects?: number;
-  kind?: "correction" | "retraction";
-}
 
 export interface Clock {
   now?: number;
@@ -71,33 +62,21 @@ export async function remember(db: D1Database, raw: unknown, clock: Clock = {}):
     await checkCorrectable(db, input.corrects, input.name);
   }
 
-  const statements: D1PreparedStatement[] = [];
-  if (!existing) {
-    statements.push(db.prepare("INSERT INTO names (name, type) VALUES (?, ?)").bind(input.name, type));
-  }
-  statements.push(
-    db
-      .prepare(
-        `INSERT INTO records (name, occurred_at, description, body, corrects, kind)
-         VALUES (?, ?, ?, ?, ?, ?)
-         RETURNING id, occurred_at, created_at`,
-      )
-      .bind(input.name, input.occurred_at, input.description, input.body, input.corrects ?? null, input.kind ?? null),
-  );
-
   let inserted: { id: number; occurred_at: string; created_at: string };
   try {
-    const results = await db.batch<{ id: number; occurred_at: string; created_at: string }>(statements);
-    inserted = results[results.length - 1]!.results[0]!;
+    inserted = await insertRecord(db, {
+      name: input.name,
+      ...(!existing && { newNameType: type }),
+      occurred_at: input.occurred_at,
+      description: input.description,
+      body: input.body,
+      corrects: input.corrects,
+      kind: input.kind,
+    });
   } catch (error) {
     // Another save got in between our checks and this insert.
     throw await explainConflict(db, error, input.name, input.corrects);
   }
-
-  const previous = await db
-    .prepare("SELECT max(id) AS id FROM records WHERE name = ? AND id < ?")
-    .bind(input.name, inserted.id)
-    .first<{ id: number | null }>();
 
   return {
     id: inserted.id,
@@ -105,20 +84,13 @@ export async function remember(db: D1Database, raw: unknown, clock: Clock = {}):
     type,
     occurred_at: inserted.occurred_at,
     created_at: inserted.created_at,
-    previous_id: previous?.id ?? null,
+    previous_id: await previousId(db, input.name, inserted.id),
     ...(input.corrects !== undefined && { corrects: input.corrects, kind: input.kind }),
   };
 }
 
 async function checkCorrectable(db: D1Database, id: number, name: string): Promise<void> {
-  const target = await db
-    .prepare(
-      `SELECT r.name, c.id AS corrected_by
-       FROM records r LEFT JOIN records c ON c.corrects = r.id
-       WHERE r.id = ?`,
-    )
-    .bind(id)
-    .first<{ name: string; corrected_by: number | null }>();
+  const target = await correctionTarget(db, id);
   if (!target) throw new BankError(`#${id} doesn't exist`);
   if (target.name !== name) throw new BankError(`#${id} is in '${target.name}', not '${name}'`);
   if (target.corrected_by !== null) {
@@ -128,18 +100,18 @@ async function checkCorrectable(db: D1Database, id: number, name: string): Promi
   }
 }
 
-/** Turns a constraint failure caused by a concurrent save into a fixable message. */
+/**
+ * Turns a constraint failure caused by a concurrent save into a fixable
+ * message. Throws the explanation when there is one (checkCorrectable throws
+ * it), otherwise returns the original error for the caller to rethrow.
+ */
 async function explainConflict(db: D1Database, error: unknown, name: string, corrects?: number): Promise<unknown> {
   const message = error instanceof Error ? error.message : String(error);
   if (/UNIQUE constraint failed: names\.name/.test(message)) {
     return new BankError(`'${name}' was just created by another save. Omit new_name and type to add to it.`);
   }
   if (corrects !== undefined && /UNIQUE constraint failed: records\.corrects|corrects: must point/.test(message)) {
-    try {
-      await checkCorrectable(db, corrects, name);
-    } catch (explained) {
-      return explained;
-    }
+    await checkCorrectable(db, corrects, name); // throws the BankError that explains it
   }
   return error;
 }

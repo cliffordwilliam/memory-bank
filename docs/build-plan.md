@@ -119,9 +119,9 @@ Builds the design in `bank-spec.md` (draft 6, final). Each phase ends with a che
 ## Phase 5: login (local)
 
 1. **You:** create two GitHub OAuth apps:
-   - "dev", with callback `http://localhost:8788/callback`;
+   - "dev", with callback `http://localhost:8787/callback` (the port `wrangler dev` uses);
    - "prod", whose callback URL we fill in at phase 6.
-2. Put the dev app's id and secret in `.dev.vars`, which is never committed.
+2. Copy `.dev.vars.example` to `.dev.vars` (never committed) and fill in the dev app's id and secret and your GitHub id (`PUBLIC_URL` is already `http://localhost:8787`).
 3. **The code:**
    - `workers-oauth-provider` in front of `/mcp`;
    - the GitHub handler;
@@ -137,7 +137,7 @@ Builds the design in `bank-spec.md` (draft 6, final). Each phase ends with a che
 1. **You:** `npx wrangler login` (in the browser).
 2. **Create the remote resources:** the remote D1 database and the KV namespace. Put their ids in `wrangler.jsonc`.
 3. **Apply the migration remotely:** `npx wrangler d1 migrations apply <db> --remote`.
-4. **Secrets:** `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and `COOKIE_ENCRYPTION_KEY` via `wrangler secret put`, plus the allowed GitHub id.
+4. **Settings:** `wrangler secret put` each of `PUBLIC_URL` (the real `workers.dev` address), `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET` and `ALLOWED_GITHUB_ID`. `wrangler deploy` refuses to go out while any is missing.
 5. **You:** set the prod OAuth app's callback to `https://<worker>.workers.dev/callback`.
 6. `npx wrangler deploy`.
 7. **Allowlist check online:** set a different id, confirm you're refused, then set yours back.
