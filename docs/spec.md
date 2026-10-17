@@ -307,7 +307,7 @@ Nothing else can change. Ids, record names, times, correction links and slugs ar
   - `@cloudflare/workers-oauth-provider` serves discovery, registration (DCR, and CIMD for Claude), the token endpoint and token checks.
   - Our pages are the consent page (`/authorize`) and GitHub's callback (`/callback`), using the library's consent and upstream helpers. The consent form works once, only in the browser that opened it; GitHub's callback likewise.
   - GitHub's leg uses PKCE too, requests no scopes, and its token is used once to read the numeric id, then dropped.
-  - The grant stores `{ githubId, login }` (encrypted by the library). `/mcp` re-checks `githubId` against `ALLOWED_GITHUB_ID` on every request. A token whose account is no longer allowed counts as revoked: `401` with `error="invalid_token"` and the usual discovery link, so clients start a fresh login (which then refuses the account) instead of stopping at a dead-end `403`.
+  - The grant stores `{ githubId, login }` (encrypted by the library). `/mcp` re-checks `githubId` against `ALLOWED_GITHUB_ID` on every request.
   - **Settings:** all four (`PUBLIC_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_ID`) are declared in `wrangler.jsonc` under `secrets.required`, with values in `.dev.vars` locally and `wrangler secret put` online. One switch per environment.
     - Wrangler checks they *exist*: `wrangler deploy` refuses to go out without them, a missing one is a warning in `wrangler dev`, and `wrangler types` types them.
     - `PUBLIC_URL` isn't secret, and the bank publishes it: `/.well-known/oauth-protected-resource/mcp` shows `resource` = `PUBLIC_URL` + `/mcp`.

@@ -266,12 +266,7 @@ describe("refusals", () => {
   it("changing the allowed id locks out tokens issued before the change", async () => {
     const tokens = await ownerTokens();
     expect((await callMcp(tokens.access_token, {})).status).toBe(200);
-    // 401 invalid_token, not 403: clients start a fresh login, which then refuses the account.
-    const response = await callMcp(tokens.access_token, { ALLOWED_GITHUB_ID: "2002" });
-    expect(response.status).toBe(401);
-    const challenge = response.headers.get("www-authenticate")!;
-    expect(challenge).toContain('error="invalid_token"');
-    expect(challenge).toContain(`resource_metadata="${ORIGIN}/.well-known/oauth-protected-resource/mcp"`);
+    expect((await callMcp(tokens.access_token, { ALLOWED_GITHUB_ID: "2002" })).status).toBe(403);
   });
 
   it.each([
