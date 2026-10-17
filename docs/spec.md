@@ -226,6 +226,16 @@ The description also tells Claude:
   - `occurred_at` is when it happened; use it for "when", "last week" and "my last dose".
 - **For log questions,** filter by `name` and a time range rather than by `query`.
 
+### 7.4 Details settled while building (phase 3)
+
+- **Unknown parameters are refused** (e.g. an old `order`), never silently ignored.
+- **Several problems are reported at once,** joined with `;`.
+- **`recall` checks its own inputs:** an unknown `type` lists the valid types; `after` must be earlier than `before`; `query` needs 1–20 keywords made of letters or digits (a lone `-` or `?` isn't a keyword).
+- **`recall(ids)` reports `missing_ids`** for ids that don't exist, and returns the rest in id order.
+- **A `page_token` belongs to its filters.** Reusing it with different filters, or sending a broken one, is an error that says to start again.
+- **Paging continues after the previous page's last row** for `occurred_at` and `created_at`, so records saved while paging don't shift the pages. `relevance` pages by position, since its ranking can change as records are added.
+- **Optional fields are left out when empty:** `corrects`, `kind`, `corrected_by`, `corrected_kind`, `modified_at` and `body_truncated` appear only when they apply.
+
 ### 7.3 `list_topics`: the index (like `MEMORY.md`)
 
 | Input | Notes |
