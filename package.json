@@ -2,6 +2,7 @@
   "name": "memory-bank",
   "version": "0.0.0",
   "private": true,
+  "license": "MIT",
   "description": "A personal, add-only memory bank for Claude, served as a remote MCP server on Cloudflare Workers",
   "type": "module",
   "engines": {
