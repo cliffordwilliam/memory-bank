@@ -16,15 +16,20 @@ import { errorResponse } from "./errors";
 import { createBankServer } from "./mcp";
 
 /**
- * /mcp, reached only with a valid token. The allowed id is checked again on
- * every request, not just at login, so changing ALLOWED_GITHUB_ID locks out
+ * Whether the grant behind this request belongs to the allowed account. Checked
+ * on every request, not just at login, so changing ALLOWED_GITHUB_ID locks out
  * tokens issued before the change.
  */
+function isAllowed(env: Env, ctx: ExecutionContext): boolean {
+  // ctx.props is the grant's props, but the OAuth library types it as unknown.
+  const props = (ctx as ExecutionContext<Partial<Props> | undefined>).props;
+  return props?.githubId === readConfig(env).allowedGithubId;
+}
+
+/** /mcp, reached only with a valid token. */
 const bankApi = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
-    const allowed = readConfig(env).allowedGithubId;
-    const props = (ctx as ExecutionContext & { props?: Partial<Props> }).props;
-    if (props?.githubId !== allowed) return new Response("Forbidden", { status: 403 });
+    if (!isAllowed(env, ctx)) return new Response("Forbidden", { status: 403 });
     return createMcpHandler(() => createBankServer(env.DB))(request, env, ctx);
   },
 };
