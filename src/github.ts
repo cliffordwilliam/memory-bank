@@ -1,13 +1,14 @@
 // The GitHub side of the login: "who is this?" (spec §11). Our Worker is the
 // client here and GitHub the issuer, with PKCE on this leg too. We only need
 // the numeric user id, so no scopes are requested and GitHub's token is used
-// once and never stored.
+// once, never stored, and revoked.
 
 import type { Config } from "./config";
 
 const AUTHORIZE_URL = "https://github.com/login/oauth/authorize";
 const TOKEN_URL = "https://github.com/login/oauth/access_token";
 const USER_URL = "https://api.github.com/user";
+const API_HEADERS = { accept: "application/vnd.github+json", "user-agent": "memory-bank", "x-github-api-version": "2022-11-28" };
 
 export function callbackUrl(config: Config): string {
   return `${config.publicUrl}/callback`;
@@ -35,9 +36,15 @@ export function githubAuthorizeUrl(config: Config, state: string, challenge: str
 /**
  * Trades GitHub's one-time code for the account's numeric id and login, or
  * null when GitHub refused, failed or couldn't be reached (the reason is
- * logged). The caller decides what that means for the login.
+ * logged). The caller decides what that means for the login. GitHub's token
+ * is revoked once the lookup is done, in the background via `ctx`.
  */
-export async function githubUser(config: Config, code: string, verifier: string): Promise<{ id: number; login: string } | null> {
+export async function githubUser(
+  config: Config,
+  ctx: ExecutionContext,
+  code: string,
+  verifier: string,
+): Promise<{ id: number; login: string } | null> {
   try {
     const tokenResponse = await fetch(TOKEN_URL, {
       method: "POST",
@@ -56,24 +63,46 @@ export async function githubUser(config: Config, code: string, verifier: string)
       return null;
     }
 
-    const userResponse = await fetch(USER_URL, {
-      headers: {
-        accept: "application/vnd.github+json",
-        authorization: `Bearer ${token.access_token}`,
-        "user-agent": "memory-bank",
-        "x-github-api-version": "2022-11-28",
-      },
-    });
-    const user = (await userResponse.json().catch(() => ({}))) as { id?: unknown; login?: unknown };
-    if (!userResponse.ok || typeof user.id !== "number" || typeof user.login !== "string") {
-      console.error(`GitHub user lookup failed: ${userResponse.status}`);
-      return null;
+    const accessToken = token.access_token;
+    try {
+      const userResponse = await fetch(USER_URL, { headers: { ...API_HEADERS, authorization: `Bearer ${accessToken}` } });
+      const user = (await userResponse.json().catch(() => ({}))) as { id?: unknown; login?: unknown };
+      if (!userResponse.ok || typeof user.id !== "number" || typeof user.login !== "string") {
+        console.error(`GitHub user lookup failed: ${userResponse.status}`);
+        return null;
+      }
+      return { id: user.id, login: user.login };
+    } finally {
+      // Only after the lookup, so the two can't race.
+      ctx.waitUntil(revokeToken(config, accessToken));
     }
-    return { id: user.id, login: user.login };
   } catch (error) {
     // fetch itself throws when GitHub can't be reached at all.
     console.error(`GitHub unreachable: ${error instanceof Error ? error.message : String(error)}`);
     return null;
+  }
+}
+
+/**
+ * Asks GitHub to revoke a token we're done with, so logins don't leave live
+ * tokens behind. Best effort: a failure is logged and the login goes on.
+ */
+async function revokeToken(config: Config, accessToken: string): Promise<void> {
+  try {
+    // GitHub's docs don't say how this endpoint authenticates; Basic with the
+    // app's id and secret was checked on a real login (204, then /user 401).
+    const response = await fetch(`https://api.github.com/applications/${config.githubClientId}/token`, {
+      method: "DELETE",
+      headers: {
+        ...API_HEADERS,
+        authorization: `Basic ${btoa(`${config.githubClientId}:${config.githubClientSecret}`)}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ access_token: accessToken }),
+    });
+    if (response.status !== 204) console.error(`GitHub token revoke failed: ${response.status}`);
+  } catch (error) {
+    console.error(`GitHub token revoke failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 

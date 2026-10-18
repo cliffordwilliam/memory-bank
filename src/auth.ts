@@ -26,11 +26,11 @@ import { escape, html, lockDown, page } from "./pages";
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
 
 export const authHandler = {
-  async fetch(request: Request, env: AuthEnv): Promise<Response> {
+  async fetch(request: Request, env: AuthEnv, ctx: ExecutionContext): Promise<Response> {
     const { pathname } = new URL(request.url);
     if (pathname === "/authorize" && request.method === "GET") return showConsent(request, env);
     if (pathname === "/authorize" && request.method === "POST") return submitConsent(request, env);
-    if (pathname === "/callback" && request.method === "GET") return githubCallback(request, env);
+    if (pathname === "/callback" && request.method === "GET") return githubCallback(request, env, ctx);
     if (pathname === "/" && request.method === "GET") {
       return page(200, "Memory bank", "<p>A personal memory bank for Claude. Connect at <code>/mcp</code>.</p>");
     }
@@ -68,7 +68,7 @@ async function submitConsent(request: Request, env: AuthEnv): Promise<Response> 
   return new Response(null, { status: 302, headers: upstream.headers });
 }
 
-async function githubCallback(request: Request, env: AuthEnv): Promise<Response> {
+async function githubCallback(request: Request, env: AuthEnv, ctx: ExecutionContext): Promise<Response> {
   const config = readConfig(env);
   const oauth = env.OAUTH_PROVIDER;
   const { request: original, data, headers } = await oauth.finishUpstream<{ verifier: string }>(request);
@@ -80,7 +80,7 @@ async function githubCallback(request: Request, env: AuthEnv): Promise<Response>
     throw loginFailed(original, headers, "access_denied", "GitHub sign-in was cancelled");
   }
 
-  const user = await githubUser(config, code, data.verifier);
+  const user = await githubUser(config, ctx, code, data.verifier);
   if (!user) throw loginFailed(original, headers, "temporarily_unavailable", "GitHub sign-in failed; try again");
 
   // The allowlist: GitHub proved who this is; only one account may in.

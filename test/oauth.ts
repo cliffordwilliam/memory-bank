@@ -41,13 +41,15 @@ async function s256(verifier: string): Promise<string> {
 /**
  * Replaces GitHub: the token endpoint checks the client credentials, the code
  * and the PKCE verifier against the challenge our Worker sent; /user answers
- * as `user`. Other fetches pass through.
+ * as `user` until the token is revoked, which needs the app's credentials
+ * (Basic). Other fetches pass through.
  */
 export function mockGitHub(
   user: { id: number; login: string },
-  options: { failTokenExchange?: boolean; unreachable?: boolean } = {},
+  options: GitHubOptions = {},
 ) {
   const challenges = new Map<string, string>(); // code -> challenge
+  const revoked: string[] = [];
   const realFetch = globalThis.fetch;
   const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const request = new Request(input, init);
@@ -67,13 +69,23 @@ export function mockGitHub(
       return Response.json(ok ? { access_token: "gho_test", token_type: "bearer", scope: "" } : { error: "bad_verification_code" });
     }
     if (request.url === "https://api.github.com/user") {
-      return request.headers.get("authorization") === "Bearer gho_test"
+      return request.headers.get("authorization") === "Bearer gho_test" && !revoked.includes("gho_test")
         ? Response.json(user)
         : new Response("Bad credentials", { status: 401 });
+    }
+    if (request.method === "DELETE" && request.url === "https://api.github.com/applications/test-github-client/token") {
+      if (options.failRevoke) return new Response("Server error", { status: 500 });
+      if (request.headers.get("authorization") !== `Basic ${btoa("test-github-client:test-github-secret")}`) {
+        return new Response("Not found", { status: 404 });
+      }
+      revoked.push(((await request.json()) as { access_token: string }).access_token);
+      return new Response(null, { status: 204 });
     }
     return realFetch(input, init);
   });
   return {
+    /** The tokens our Worker has revoked so far (it does so in the background). */
+    revoked,
     /** What GitHub would do after the user signs in: issue a code for this login. */
     issueCode(githubAuthorizeUrl: string): string {
       const url = new URL(githubAuthorizeUrl);
@@ -83,6 +95,12 @@ export function mockGitHub(
     },
     restore: () => spy.mockRestore(),
   };
+}
+
+export interface GitHubOptions {
+  failTokenExchange?: boolean;
+  unreachable?: boolean;
+  failRevoke?: boolean;
 }
 
 export interface Client {
@@ -168,8 +186,8 @@ export interface Tokens {
 }
 
 /** The whole login as `user`, start to finish. Returns where the browser ends up. */
-export async function login(user: { id: number; login: string }) {
-  const github = mockGitHub(user);
+export async function login(user: { id: number; login: string }, options: GitHubOptions = {}) {
+  const github = mockGitHub(user, options);
   try {
     const client = await registerClient();
     const jar = new CookieJar();
@@ -179,7 +197,7 @@ export async function login(user: { id: number; login: string }) {
     const state = new URL(githubUrl).searchParams.get("state")!;
     const code = github.issueCode(githubUrl);
     const back = await githubCallback(new URLSearchParams({ code, state }).toString(), jar);
-    return { client, final: new URL(back.headers.get("location")!) };
+    return { client, final: new URL(back.headers.get("location")!), revoked: github.revoked };
   } finally {
     github.restore();
   }

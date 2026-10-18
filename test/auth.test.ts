@@ -91,6 +91,23 @@ describe("the owner's login", () => {
     expect(final.searchParams.get("iss")).toBe(ORIGIN);
   });
 
+  it("revokes GitHub's token once it has read the account", async () => {
+    const { final, revoked } = await login(OWNER);
+    expect(final.searchParams.get("code")).not.toBeNull();
+    await vi.waitFor(() => expect(revoked).toEqual(["gho_test"]));
+  });
+
+  it("still finishes the login when the revoke fails, and logs it", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const { final } = await login(OWNER, { failRevoke: true });
+      expect(final.searchParams.get("code")).not.toBeNull();
+      await vi.waitFor(() => expect(error).toHaveBeenCalledWith("GitHub token revoke failed: 500"));
+    } finally {
+      error.mockRestore();
+    }
+  });
+
   it("issues tokens that open /mcp", async () => {
     tokens = await ownerTokens();
     const response = await callMcp(tokens.access_token);
@@ -173,6 +190,11 @@ describe("refusals", () => {
     expect(final.searchParams.get("error")).toBe("access_denied");
     expect(final.searchParams.get("error_description")).toBe("This memory bank belongs to someone else");
     expect(final.searchParams.get("code")).toBeNull();
+  });
+
+  it("revokes GitHub's token for a refused account too", async () => {
+    const { revoked } = await login(STRANGER);
+    await vi.waitFor(() => expect(revoked).toEqual(["gho_test"]));
   });
 
   it("Deny on the consent page goes back with access_denied", async () => {
