@@ -99,9 +99,20 @@ a restart (`claude --continue` keeps the conversation).
 **Claude Code works best with a time hook.** Every save needs the wall-clock
 time with your offset. The web and phone apps show Claude the current time
 and your timezone, but Claude Code only knows the date: without help, it has
-to run `date` or ask you before saving. A small `UserPromptSubmit` hook that
-adds the current time and offset to each message fixes that. It's coming to
-this repo's `hooks/` folder, with setup instructions.
+to run `date` or ask you before saving. A one-line `UserPromptSubmit` hook
+fixes that: Claude Code runs it on every message you send and shows Claude its
+output alongside the message, e.g.
+
+```
+Current local time: 2026-10-18T17:30:12+07:00 (Sunday)
+```
+
+To set it up, merge [`hooks/time-hook.json`](hooks/time-hook.json) into
+`~/.claude/settings.json` (user settings, so it works in every project; add the
+`UserPromptSubmit` entry to your existing `hooks` if you have some). It's only
+`date` and `sed`, so it works on Linux and macOS alike; the `sed` turns `+0700`
+into the `+07:00` the bank expects. New sessions pick it up; in a running one,
+open `/hooks` once.
 
 ## Deploying your own
 
