@@ -126,6 +126,18 @@ describe("remember", () => {
     await expect(save({ name: uniqueName(), body: "x".repeat(16_000) })).resolves.toBeDefined();
   });
 
+  it("R7: counts characters the way SQLite does, so an emoji is one", async () => {
+    // "🍰" is one character but two UTF-16 units.
+    await expect(save({ name: uniqueName(), body: "🍰".repeat(16_000) })).resolves.toBeDefined();
+    await expect(save({ name: uniqueName(), description: "🍰".repeat(200) })).resolves.toBeDefined();
+    await expect(save({ name: uniqueName(), body: "🍰".repeat(16_001) })).rejects.toThrow(
+      "body: is 16001 characters; the limit is 16000",
+    );
+    await expect(save({ name: uniqueName(), description: "🍰".repeat(201) })).rejects.toThrow(
+      "description: must be one line of at most 200 characters",
+    );
+  });
+
   it("R8: corrects and kind go together", async () => {
     const name = uniqueName();
     const wrong = await save({ name });

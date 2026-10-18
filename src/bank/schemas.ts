@@ -88,7 +88,8 @@ const rememberShape = (type: TypeField) => ({
   body: z
     .string()
     .min(1, { error: "can't be empty" })
-    .max(MAX_BODY, { error: (issue) => `is ${(issue.input as string).length} characters; the limit is ${MAX_BODY}` })
+    // Zod and SQLite count code points (an emoji is one); so does the message.
+    .max(MAX_BODY, { error: (issue) => `is ${Array.from(issue.input as string).length} characters; the limit is ${MAX_BODY}` })
     .meta({ description: "The memory itself, stored exactly as given. Keep the user's own words. For non-log types, write the whole current state, not just the change." }),
   occurred_at: wallClock.meta({ description: "When the thing described happened, as wall-clock time with the user's offset, e.g. 2026-10-15T21:00:00+07:00. For something happening now, the current time. Never in the future." }),
   corrects: recordId
