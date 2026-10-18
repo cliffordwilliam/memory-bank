@@ -20,7 +20,7 @@ import {
 import { readConfig, type Props } from "./config";
 import { LoginFailed } from "./errors";
 import { githubAuthorizeUrl, githubUser, pkcePair } from "./github";
-import { escape, html, page } from "./pages";
+import { escape, html, lockDown, page } from "./pages";
 
 /** The Worker's env, plus the helpers the OAuth library adds for its default handler. */
 type AuthEnv = Env & { OAUTH_PROVIDER: OAuthHelpers };
@@ -44,6 +44,7 @@ async function showConsent(request: Request, env: AuthEnv): Promise<Response> {
   const details = await oauth.describeConsent(authRequest); // first: a failed lookup leaves nothing behind
   const consent = await oauth.beginConsent(authRequest);
   consent.headers.set("content-type", "text/html; charset=utf-8");
+  lockDown(consent.headers);
   return new Response(consentPage(details, consent.handle), { headers: consent.headers });
 }
 

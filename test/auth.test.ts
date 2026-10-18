@@ -115,7 +115,7 @@ describe("the owner's login", () => {
     expect((await callMcp(refreshed.access_token)).status).toBe(200);
   });
 
-  it("the consent page shows the client, where access goes, and can't be framed", async () => {
+  it("the consent page shows the client, where access goes, and is locked down", async () => {
     const client = await registerClient();
     const { response } = await openConsent(client, new CookieJar());
     const html = await response.text();
@@ -124,7 +124,10 @@ describe("the owner's login", () => {
     expect(html).toContain("<strong>localhost</strong>");
     expect(html).toContain("This sends access to an app on your computer.");
     expect(html).toContain("isn't verified");
-    expect(response.headers.get("content-security-policy") ?? response.headers.get("x-frame-options")).toBeTruthy();
+    expect(response.headers.get("content-security-policy")).toBe(
+      "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'",
+    );
+    expect(response.headers.get("x-frame-options")).toBe("DENY");
   });
 
   it("escapes a client name chosen to inject HTML", async () => {

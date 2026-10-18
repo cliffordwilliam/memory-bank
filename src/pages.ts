@@ -13,11 +13,17 @@ export function page(status: number, title: string, body: string, headers?: Head
     headers: headers ?? new Headers(),
   });
   response.headers.set("content-type", "text/html; charset=utf-8");
-  if (!response.headers.has("content-security-policy")) {
-    response.headers.set("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
-    response.headers.set("x-frame-options", "DENY");
-  }
+  lockDown(response.headers);
   return response;
+}
+
+/**
+ * Every page's security headers: no scripts, images or connections, and no
+ * framing. Replaces the OAuth library's weaker policy (framing only).
+ */
+export function lockDown(headers: Headers): void {
+  headers.set("content-security-policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'");
+  headers.set("x-frame-options", "DENY");
 }
 
 /** The page skeleton. `title` must already be escaped. */
