@@ -5,15 +5,14 @@ import { BankError } from "../errors";
 import { describeNames } from "./lookups";
 import { decodePageToken, encodePageToken, type PageState } from "./paging";
 import type { RecalledRecord, RecallResult } from "./results";
-import { parse, recallInput, type RecallInput } from "./schemas";
+import { DEFAULT_RECALL_RESULTS, parse, recallInput, type RecallInput } from "./schemas";
 import { toFtsQuery } from "./search";
 import { getName, queryRecords, recordsByIds, type RecordRow, typeNames } from "./store";
 import { millisToUtcText, wallClockToMillis } from "./time";
 
-const DEFAULT_MAX_RESULTS = 10;
 /** Pages with more records than this get their bodies cut short. */
-const FULL_BODY_LIMIT = 3;
-const TRUNCATED_BODY = 500;
+export const FULL_BODY_LIMIT = 3;
+export const TRUNCATED_BODY = 500;
 
 export async function recall(db: D1Database, raw: unknown): Promise<RecallResult> {
   const input = parse(recallInput, raw);
@@ -40,7 +39,7 @@ async function recallByIds(db: D1Database, input: RecallInput): Promise<RecallRe
 async function recallByFilters(db: D1Database, input: RecallInput): Promise<RecallResult> {
   const orderBy = input.order_by ?? (input.query !== undefined ? "relevance" : "occurred_at");
   const direction = input.direction ?? "newest";
-  const maxResults = input.max_results ?? DEFAULT_MAX_RESULTS;
+  const maxResults = input.max_results ?? DEFAULT_RECALL_RESULTS;
 
   // R13: relevance only means something with keywords.
   if (orderBy === "relevance" && input.query === undefined) {

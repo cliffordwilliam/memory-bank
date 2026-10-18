@@ -3,14 +3,12 @@
 import { BankError } from "../errors";
 import { decodePageToken, encodePageToken } from "./paging";
 import type { ListTopicsResult } from "./results";
-import { listTopicsInput, parse } from "./schemas";
+import { DEFAULT_TOPICS_RESULTS, listTopicsInput, parse } from "./schemas";
 import { queryTopics, typeNames } from "./store";
-
-const DEFAULT_MAX_RESULTS = 50;
 
 export async function listTopics(db: D1Database, raw: unknown): Promise<ListTopicsResult> {
   const input = parse(listTopicsInput, raw);
-  const maxResults = input.max_results ?? DEFAULT_MAX_RESULTS;
+  const maxResults = input.max_results ?? DEFAULT_TOPICS_RESULTS;
 
   if (input.type !== undefined) {
     const types = await typeNames(db);

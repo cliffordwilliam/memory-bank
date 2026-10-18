@@ -16,7 +16,9 @@ export const MAX_BODY = 16_000;
 export const MAX_DESCRIPTION = 200;
 export const MAX_IDS = 3;
 export const MAX_RECALL_RESULTS = 20;
+export const DEFAULT_RECALL_RESULTS = 10;
 export const MAX_TOPICS_RESULTS = 200;
+export const DEFAULT_TOPICS_RESULTS = 50;
 
 const name = z
   .string()
@@ -145,7 +147,7 @@ const recallShape = (type: TypeField) => ({
     .enum(["newest", "oldest"], { error: "must be newest or oldest" })
     .optional()
     .meta({ description: "newest (default) or oldest first. Ignored for relevance." }),
-  max_results: maxResults(MAX_RECALL_RESULTS, 10),
+  max_results: maxResults(MAX_RECALL_RESULTS, DEFAULT_RECALL_RESULTS),
   page_token: pageToken,
 });
 
@@ -157,7 +159,7 @@ export const recallTool = (types: TypeInfo[]) =>
 
 const listTopicsShape = (type: TypeField) => ({
   type,
-  max_results: maxResults(MAX_TOPICS_RESULTS, 50),
+  max_results: maxResults(MAX_TOPICS_RESULTS, DEFAULT_TOPICS_RESULTS),
   page_token: pageToken,
 });
 
