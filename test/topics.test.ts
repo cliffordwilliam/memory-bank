@@ -1,7 +1,7 @@
 // Phase 3: list_topics (spec §7.3). Its own file, so it starts with an empty bank.
 import { describe, expect, it } from "vitest";
 import { listTopics } from "../src/bank";
-import { db, save } from "./helpers";
+import { db, save, tamperToken } from "./helpers";
 
 describe("list_topics", () => {
   it("is empty on an empty bank", async () => {
@@ -43,5 +43,15 @@ describe("list_topics", () => {
     await expect(listTopics(db, { type: "log", page_token: first.next_page_token })).rejects.toThrow(
       "page_token belongs to a different query",
     );
+  });
+
+  it("refuses a token whose position was garbled (#2)", async () => {
+    const first = await listTopics(db, { max_results: 1 });
+    for (const after of ["x", [1, 2], ["meals", "x"]]) {
+      const page_token = tamperToken(first.next_page_token!, (s) => (s.after = after));
+      await expect(listTopics(db, { max_results: 1, page_token })).rejects.toThrow(
+        "page_token isn't valid; repeat the call without it",
+      );
+    }
   });
 });

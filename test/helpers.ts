@@ -29,3 +29,13 @@ export async function save(fields: Record<string, unknown> & { name: string }) {
     clock,
   );
 }
+
+/**
+ * A page token with its decoded state changed, the way a client garbling a
+ * long opaque string might. Tokens are base64url JSON (src/bank/paging.ts).
+ */
+export function tamperToken(token: string, change: (state: Record<string, unknown>) => void): string {
+  const state = JSON.parse(atob(token.replaceAll("-", "+").replaceAll("_", "/")));
+  change(state);
+  return btoa(JSON.stringify(state)).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+}

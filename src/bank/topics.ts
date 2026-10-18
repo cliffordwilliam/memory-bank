@@ -1,7 +1,8 @@
 // list_topics: the index of names, like MEMORY.md (spec §7.3).
 
+import { z } from "zod";
 import { BankError } from "../errors";
-import { decodePageToken, encodePageToken } from "./paging";
+import { afterState, decodePageToken, encodePageToken, fingerprintOf } from "./paging";
 import type { ListTopicsResult } from "./results";
 import { DEFAULT_TOPICS_RESULTS, listTopicsInput, parse } from "./schemas";
 import { queryTopics, typeNames } from "./store";
@@ -15,14 +16,14 @@ export async function listTopics(db: D1Database, raw: unknown): Promise<ListTopi
     if (!types.includes(input.type)) throw new BankError(`type: must be one of: ${types.join(", ")}`);
   }
 
-  const fingerprint = JSON.stringify(["topics", input.type]);
-  const page = input.page_token ? decodePageToken(input.page_token, fingerprint) : undefined;
+  const fingerprint = await fingerprintOf(["topics", input.type]);
+  const page = input.page_token ? decodePageToken(input.page_token, fingerprint, afterState(z.string())) : undefined;
 
   // Newest activity first (highest latest_id); names break ties so paging is exact.
   const { total, rows } = await queryTopics(db, {
     type: input.type,
     limit: maxResults + 1,
-    after: page?.after as [string, number] | undefined,
+    after: page?.after,
   });
 
   const pageRows = rows.slice(0, maxResults);

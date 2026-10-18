@@ -1,7 +1,7 @@
 // Phase 3: the bank's operations and every rule R1–R13 (spec §6, §7).
 import { describe, expect, it } from "vitest";
 import { recall, remember } from "../src/bank";
-import { clock, db, NOW, save, uniqueName } from "./helpers";
+import { clock, db, NOW, save, tamperToken, uniqueName } from "./helpers";
 
 const rememberRaw = (input: unknown) => remember(db, input, clock);
 
@@ -329,6 +329,42 @@ describe("paging", () => {
       "page_token belongs to a different query",
     );
     await expect(recall(db, { name, page_token: "not-a-token" })).rejects.toThrow("page_token isn't valid");
+  });
+
+  it("pages through a query in any script, with short tokens (#1)", async () => {
+    const name = uniqueName();
+    const ids: number[] = [];
+    for (const extra of ["日本", "🍜", "—"]) ids.push((await save({ name, body: `ラーメン ${extra}` })).id);
+    const seen: number[] = [];
+    let token: string | undefined;
+    do {
+      const page = await recall(db, { name, query: "ラーメン 🍜 —", max_results: 1, page_token: token });
+      seen.push(...page.records.map((r) => r.id));
+      token = page.next_page_token;
+      if (token) expect(token).toMatch(/^[A-Za-z0-9_-]{1,80}$/);
+    } while (token);
+    expect(seen.sort((x, y) => x - y)).toEqual(ids);
+  });
+
+  it("refuses a token whose position was garbled (#2)", async () => {
+    const name = uniqueName();
+    for (let i = 0; i < 3; i++) await save({ name, body: `pancake ${i}` });
+    const byTime = (await recall(db, { name, max_results: 1 })).next_page_token!;
+    const bySave = (await recall(db, { name, order_by: "created_at", max_results: 1 })).next_page_token!;
+    const byRelevance = (await recall(db, { name, query: "pancake", max_results: 1 })).next_page_token!;
+    const garbled: [Record<string, unknown>, string][] = [
+      [{}, tamperToken(byTime, (s) => (s.after = "x"))],
+      [{}, tamperToken(byTime, (s) => (s.after = [42, 1]))],
+      [{}, tamperToken(byTime, (s) => (s.extra = 1))],
+      [{ order_by: "created_at" }, tamperToken(bySave, (s) => (s.after = ["x", 1]))],
+      [{ query: "pancake" }, tamperToken(byRelevance, (s) => (s.offset = -1))],
+      [{ query: "pancake" }, tamperToken(byRelevance, (s) => (s.offset = "5"))],
+    ];
+    for (const [filters, page_token] of garbled) {
+      await expect(recall(db, { name, max_results: 1, ...filters, page_token })).rejects.toThrow(
+        "page_token isn't valid; repeat the call without it",
+      );
+    }
   });
 });
 

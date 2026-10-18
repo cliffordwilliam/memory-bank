@@ -1,9 +1,10 @@
 // recall: read records, like a GET with filters and pages (spec §7.2).
 // Nothing is hidden: wrong records come back too, marked with corrected_by.
 
+import { z } from "zod";
 import { BankError } from "../errors";
 import { describeNames } from "./lookups";
-import { decodePageToken, encodePageToken, type PageState } from "./paging";
+import { afterState, decodePageToken, encodePageToken, fingerprintOf, offsetState, type PageState } from "./paging";
 import type { RecalledRecord, RecallResult } from "./results";
 import { DEFAULT_RECALL_RESULTS, parse, recallInput, type RecallInput } from "./schemas";
 import { toFtsQuery } from "./search";
@@ -13,6 +14,13 @@ import { millisToUtcText, wallClockToMillis } from "./time";
 /** Pages with more records than this get their bodies cut short. */
 export const FULL_BODY_LIMIT = 3;
 export const TRUNCATED_BODY = 500;
+
+/** The page token each order continues from: a time or an id, or an offset. */
+const pageStates = {
+  occurred_at: afterState(z.string()),
+  created_at: afterState(z.int()),
+  relevance: offsetState,
+};
 
 export async function recall(db: D1Database, raw: unknown): Promise<RecallResult> {
   const input = parse(recallInput, raw);
@@ -60,8 +68,9 @@ async function recallByFilters(db: D1Database, input: RecallInput): Promise<Reca
   }
   const fts = input.query !== undefined ? toFtsQuery(input.query) : undefined;
 
-  const fingerprint = JSON.stringify([fts, input.name, input.type, after, before, orderBy, direction]);
-  const page: PageState | undefined = input.page_token ? decodePageToken(input.page_token, fingerprint) : undefined;
+  const fingerprint = await fingerprintOf([fts, input.name, input.type, after, before, orderBy, direction]);
+  const shape: z.ZodType<PageState> = pageStates[orderBy];
+  const page = input.page_token ? decodePageToken(input.page_token, fingerprint, shape) : undefined;
   const offset = page?.offset ?? 0;
 
   const { total, rows } = await queryRecords(db, {
