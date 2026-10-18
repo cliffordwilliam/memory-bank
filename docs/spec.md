@@ -368,7 +368,7 @@ The new repo's README:
 
 ## 13. Not included yet, and never
 
-- **Backups live outside this repo,** in the private `memory-bank-backup`: a nightly GitHub Action exports `types`, `names` and `records` in one `wrangler d1 export --remote --no-schema` call (one consistent snapshot; a whole-database export refuses FTS5) and uploads the SQL to Backblaze B2, kept 30 days. Its token needs D1 Edit to export. A restore runs all migrations, then loads the file; the search index and `occurred_at_utc` rebuild themselves.
+- **Backups live outside this repo,** in the private `memory-bank-backup`: a nightly GitHub Action exports `types`, `names` and `records` in one `wrangler d1 export --remote --no-schema` call (one consistent snapshot; a whole-database export refuses FTS5) and uploads the SQL to Backblaze B2, kept 30 days. Its token needs D1 Edit to export. A restore runs all migrations, rewrites the file's `types` inserts into upserts (migration 0001 already seeds the types, and `types_no_delete` stops clearing them first), then loads it; the search index and `occurred_at_utc` rebuild themselves. The exact `sed` and both restores (practice and real) are in that repo's `restore.md`.
 - **The Claude Code time hook** is in `hooks/time-hook.json` (done 2026-10-18): a `UserPromptSubmit` command hook, `date` piped through `sed` so the offset reads `+07:00`. Its plain output is added as context next to each message. The README says how to merge it into `~/.claude/settings.json`.
 - **Never:**
   - proactive use by Claude;
