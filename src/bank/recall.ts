@@ -107,18 +107,28 @@ async function recallByFilters(db: D1Database, input: RecallInput): Promise<Reca
 }
 
 function toRecord(row: RecordRow, truncate: boolean): RecalledRecord {
-  const cut = truncate && row.body.length > TRUNCATED_BODY;
+  const short = truncate ? shortened(row.body) : undefined;
   return {
     id: row.id,
     name: row.name,
     type: row.type,
     description: row.description,
-    body: cut ? row.body.slice(0, TRUNCATED_BODY) : row.body,
-    ...(cut && { body_truncated: true as const }),
+    body: short ?? row.body,
+    ...(short !== undefined && { body_truncated: true as const }),
     occurred_at: row.occurred_at,
     created_at: row.created_at,
     ...(row.corrects !== null && { corrects: row.corrects, kind: row.kind! }),
     ...(row.corrected_by !== null && { corrected_by: row.corrected_by, corrected_kind: row.corrected_kind! }),
     ...(row.modified_at !== null && { modified_at: row.modified_at }),
   };
+}
+
+/**
+ * The body's first TRUNCATED_BODY characters, or undefined if it's no longer
+ * than that. Counts code points, not UTF-16 units, so an emoji is never cut
+ * in half.
+ */
+function shortened(body: string): string | undefined {
+  const chars = Array.from(body);
+  return chars.length > TRUNCATED_BODY ? chars.slice(0, TRUNCATED_BODY).join("") : undefined;
 }

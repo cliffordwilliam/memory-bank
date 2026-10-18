@@ -274,6 +274,14 @@ describe("recall by filters", () => {
     const three = await recall(db, { name, max_results: 3 });
     expect(three.records.every((r) => r.body.length === 800 && !("body_truncated" in r))).toBe(true);
   });
+
+  it("cuts at a whole character, never through an emoji", async () => {
+    const name = uniqueName();
+    const body = `${"a".repeat(499)}🍜${"b".repeat(100)}`; // the 500th character is the emoji
+    for (let i = 0; i < 4; i++) await save({ name, body });
+    const { records } = await recall(db, { name });
+    expect(records.every((r) => r.body === `${"a".repeat(499)}🍜` && r.body_truncated)).toBe(true);
+  });
 });
 
 describe("paging", () => {
