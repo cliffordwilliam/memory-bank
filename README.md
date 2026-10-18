@@ -167,7 +167,9 @@ npx wrangler d1 execute memory-bank --remote --command "UPDATE types SET descrip
 ```
 
 D1's Time Travel can still restore a redacted text for a few days after the
-edit, as a safety net.
+edit, as a safety net. So can backups: mine are taken nightly by a separate
+private repo (a GitHub Action that exports the three tables as SQL to
+Backblaze B2) and keep a redacted text until they expire after 30 days.
 
 ## Development
 

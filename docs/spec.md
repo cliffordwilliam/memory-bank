@@ -290,7 +290,7 @@ All of these run with `wrangler d1 execute <db> --remote --command "…"`. Claud
 
 | Action | SQL | Notes |
 |---|---|---|
-| Redact sensitive text | `UPDATE records SET body = '…' WHERE id = 57`, then `INSERT INTO records_fts(records_fts) VALUES('optimize')` | The trigger refreshes the index and sets `modified_at`. `optimize` purges the old words. D1 Time Travel can still restore the old text during its retention window, a safety net you chose to keep. |
+| Redact sensitive text | `UPDATE records SET body = '…' WHERE id = 57`, then `INSERT INTO records_fts(records_fts) VALUES('optimize')` | The trigger refreshes the index and sets `modified_at`. `optimize` purges the old words. D1 Time Travel can still restore the old text during its retention window, a safety net you chose to keep. Backups taken before the edit also keep it, for up to 30 days (§13). |
 | Change a name's type | `UPDATE names SET type = 'project' WHERE name = 'garden-plan'` | Sets `names.modified_at`. |
 | Add a type | `INSERT INTO types (name, description) VALUES (…)` | Apps see it after reconnecting. |
 | Reword a type | `UPDATE types SET description = … WHERE name = …` | |
@@ -366,7 +366,7 @@ The new repo's README:
 
 ## 13. Not included yet, and never
 
-- **Soon after the first deploy:** backups (e.g. a scheduled Worker dumping the tables as JSON to Cloudflare R2; `wrangler d1 export` refuses databases with FTS5).
+- **Backups live outside this repo,** in the private `memory-bank-backup`: a nightly GitHub Action exports `types`, `names` and `records` in one `wrangler d1 export --remote --no-schema` call (one consistent snapshot; a whole-database export refuses FTS5) and uploads the SQL to Backblaze B2, kept 30 days. Its token needs D1 Edit to export. A restore runs all migrations, then loads the file; the search index and `occurred_at_utc` rebuild themselves.
 - **In this repo, after the bank works:** the Claude Code time hook (`hooks/`). It's a `UserPromptSubmit` hook that adds the current time and offset to each message, plus the settings snippet and README instructions.
 - **Never:**
   - proactive use by Claude;

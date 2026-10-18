@@ -164,7 +164,7 @@ Builds the design in `bank-spec.md` (draft 6, final). Each phase ends with a che
 
 ## After the first version (in this order)
 
-1. **Backups:** a scheduled Worker that dumps the tables as JSON to Cloudflare R2. Restore-tested.
+1. **Backups:** done 2026-10-18, in a separate private repo (`memory-bank-backup`). A nightly GitHub Action runs one `wrangler d1 export --remote --no-schema` of `types`, `names` and `records` and uploads the SQL to Backblaze B2, kept 30 days. Restore tested against the live data, corrections included. Chosen over a Worker writing JSON to R2: the copy lives outside Cloudflare, and it's plain SQL. Its README and `restore.md` hold the setup and the restore steps.
 2. **The Claude Code time hook** in `hooks/`.
 3. **Delete the curator repo:** only after the README records its test results, and only once you've confirmed.
 
