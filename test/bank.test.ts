@@ -77,6 +77,9 @@ describe("remember", () => {
     ["hour 24", "2026-10-15T24:00:00Z"],
     ["offset beyond +14:00", "2026-10-15T21:00:00+15:00"],
     ["space instead of T", "2026-10-15 21:00:00+07:00"],
+    // SQLite's date functions only cover UTC years 0000–9999.
+    ["a UTC moment before year 0000", "0000-01-01T00:00:00+07:00"],
+    ["a UTC moment after year 9999", "9999-12-31T23:00:00-05:00"],
   ])("R5: refuses occurred_at with %s", async (_, occurred_at) => {
     await expect(save({ name: uniqueName(), occurred_at })).rejects.toThrow(
       "occurred_at: must be a real wall-clock time with offset, e.g. 2026-10-12T21:00:00+07:00",
@@ -86,6 +89,16 @@ describe("remember", () => {
   it("R5: accepts February 29 in a leap year", async () => {
     await expect(save({ name: uniqueName(), occurred_at: "2028-02-29T12:00:00Z" })).rejects.toThrow(/future/);
     await expect(save({ name: uniqueName(), occurred_at: "2024-02-29T12:00:00Z" })).resolves.toBeDefined();
+  });
+
+  it("R5: reads years 0000–0099 as written, not as 1900–1999", async () => {
+    // Year 0 is a leap year in the proleptic Gregorian calendar SQLite uses; 1900 isn't.
+    await expect(save({ name: uniqueName(), occurred_at: "0000-02-29T12:00:00Z" })).resolves.toBeDefined();
+
+    const name = uniqueName();
+    const record = await save({ name, occurred_at: "0050-01-01T00:00:00Z" });
+    const found = await recall(db, { name, after: "0049-12-31T00:00:00Z", before: "0050-01-02T00:00:00Z" });
+    expect(found.records.map((r) => r.id)).toEqual([record.id]);
   });
 
   it("R6: refuses a future time, with 5 minutes of slack", async () => {
