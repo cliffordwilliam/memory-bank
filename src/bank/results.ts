@@ -29,7 +29,7 @@ export interface RecalledRecord {
   type: string;
   description: string;
   body: string;
-  /** Set when the body was cut to 500 characters (pages of more than 3). */
+  /** Set when the body was cut to TRUNCATED_BODY characters (pages of more than FULL_BODY_LIMIT; see recall.ts). */
   body_truncated?: true;
   /** Exactly as sent: wall-clock time with offset. */
   occurred_at: string;

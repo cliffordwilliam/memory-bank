@@ -84,13 +84,11 @@ const rememberShape = (type: TypeField) => ({
     .min(1, { error: "can't be empty" })
     .max(MAX_DESCRIPTION, { error: `must be one line of at most ${MAX_DESCRIPTION} characters` })
     .refine((s) => !/[\r\n]/.test(s), { error: `must be one line of at most ${MAX_DESCRIPTION} characters` })
-    .meta({ description: "One-line summary shown in lists, at most 200 characters." }),
+    .meta({ description: `One-line summary shown in lists, at most ${MAX_DESCRIPTION} characters.` }),
   body: z
     .string()
     .min(1, { error: "can't be empty" })
-    .refine((s) => s.length <= MAX_BODY, {
-      error: (issue) => `is ${(issue.input as string).length} characters; the limit is ${MAX_BODY}`,
-    })
+    .max(MAX_BODY, { error: (issue) => `is ${(issue.input as string).length} characters; the limit is ${MAX_BODY}` })
     .meta({ description: "The memory itself, stored exactly as given. Keep the user's own words. For non-log types, write the whole current state, not just the change." }),
   occurred_at: wallClock.meta({ description: "When the thing described happened, as wall-clock time with the user's offset, e.g. 2026-10-15T21:00:00+07:00. For something happening now, the current time. Never in the future." }),
   corrects: recordId
@@ -130,7 +128,7 @@ const recallShape = (type: TypeField) => ({
     .min(1, { error: `takes 1 to ${MAX_IDS} ids` })
     .max(MAX_IDS, { error: `takes 1 to ${MAX_IDS} ids` })
     .optional()
-    .meta({ description: "Up to 3 record ids, on their own (no other parameters). Returns exactly those records, full bodies." }),
+    .meta({ description: `Up to ${MAX_IDS} record ids, on their own (no other parameters). Returns exactly those records, full bodies.` }),
   name: name.optional().meta({ description: "Only records of this name." }),
   type,
   after: wallClock
