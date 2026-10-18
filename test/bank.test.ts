@@ -361,10 +361,10 @@ describe("paging", () => {
     const bySave = (await recall(db, { name, order_by: "created_at", max_results: 1 })).next_page_token!;
     const byRelevance = (await recall(db, { name, query: "pancake", max_results: 1 })).next_page_token!;
     const garbled: [Record<string, unknown>, string][] = [
-      [{}, tamperToken(byTime, (s) => (s.after = "x"))],
-      [{}, tamperToken(byTime, (s) => (s.after = [42, 1]))],
+      [{}, tamperToken(byTime, (s) => (s.cursor = "x"))],
+      [{}, tamperToken(byTime, (s) => (s.cursor = [42, 1]))],
       [{}, tamperToken(byTime, (s) => (s.extra = 1))],
-      [{ order_by: "created_at" }, tamperToken(bySave, (s) => (s.after = ["x", 1]))],
+      [{ order_by: "created_at" }, tamperToken(bySave, (s) => (s.cursor = ["x", 1]))],
       [{ query: "pancake" }, tamperToken(byRelevance, (s) => (s.offset = -1))],
       [{ query: "pancake" }, tamperToken(byRelevance, (s) => (s.offset = "5"))],
     ];

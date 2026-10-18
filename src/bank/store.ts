@@ -174,9 +174,9 @@ export interface RecordQuery {
   limit: number;
   /**
    * Where the previous page ended: [occurred_at_utc or id, id] of its last
-   * row for occurred_at/created_at, or a row offset for relevance.
+   * row, for occurred_at/created_at. Relevance pages by offset instead.
    */
-  after?: [string | number, number];
+  cursor?: [string | number, number];
   offset?: number;
 }
 
@@ -204,17 +204,17 @@ export async function queryRecords(db: D1Database, q: RecordQuery): Promise<{ to
     offset = q.offset ?? 0;
   } else if (q.orderBy === "occurred_at") {
     order = `r.occurred_at_utc ${desc ? "DESC" : "ASC"}, r.id ${desc ? "DESC" : "ASC"}`;
-    if (q.after) {
-      const [time, id] = q.after;
+    if (q.cursor) {
+      const [time, id] = q.cursor;
       pageWhere.push(`(r.occurred_at_utc ${cmp} ? OR (r.occurred_at_utc = ? AND r.id ${cmp} ?))`);
       pageParams.push(time, time, id);
     }
   } else {
     // created_at: save order, which is id order.
     order = `r.id ${desc ? "DESC" : "ASC"}`;
-    if (q.after) {
+    if (q.cursor) {
       pageWhere.push(`r.id ${cmp} ?`);
-      pageParams.push(q.after[1]);
+      pageParams.push(q.cursor[1]);
     }
   }
 
@@ -240,7 +240,7 @@ export interface TopicQuery {
   type?: string;
   limit: number;
   /** Where the previous page ended: [name, sort_id] of its last row. */
-  after?: [string, number];
+  cursor?: [string, number];
 }
 
 /** One page of names, newest activity first, plus how many there are in all. */
@@ -250,8 +250,8 @@ export async function queryTopics(db: D1Database, q: TopicQuery): Promise<{ tota
   if (q.type !== undefined) (where.push("n.type = ?"), params.push(q.type));
   const pageWhere: string[] = [];
   const pageParams: unknown[] = [];
-  if (q.after) {
-    const [name, latest] = q.after;
+  if (q.cursor) {
+    const [name, latest] = q.cursor;
     pageWhere.push("(t.sort_id < ? OR (t.sort_id = ? AND t.name > ?))");
     pageParams.push(latest, latest, name);
   }

@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { BankError } from "../errors";
-import { afterState, decodePageToken, encodePageToken, fingerprintOf } from "./paging";
+import { cursorState, decodePageToken, encodePageToken, fingerprintOf } from "./paging";
 import type { ListTopicsResult } from "./results";
 import { DEFAULT_TOPICS_RESULTS, listTopicsInput, parse } from "./schemas";
 import { queryTopics, typeNames } from "./store";
@@ -17,20 +17,20 @@ export async function listTopics(db: D1Database, raw: unknown): Promise<ListTopi
   }
 
   const fingerprint = await fingerprintOf(["topics", input.type]);
-  const page = input.page_token ? decodePageToken(input.page_token, fingerprint, afterState(z.string())) : undefined;
+  const page = input.page_token ? decodePageToken(input.page_token, fingerprint, cursorState(z.string())) : undefined;
 
   // Newest activity first (highest latest_id); names break ties so paging is exact.
   const { total, rows } = await queryTopics(db, {
     type: input.type,
     limit: maxResults + 1,
-    after: page?.after,
+    cursor: page?.cursor,
   });
 
   const pageRows = rows.slice(0, maxResults);
   const last = pageRows[pageRows.length - 1];
   const next =
     rows.length > maxResults && last
-      ? encodePageToken({ f: fingerprint, after: [last.name, last.sort_id] })
+      ? encodePageToken({ f: fingerprint, cursor: [last.name, last.sort_id] })
       : undefined;
 
   return {

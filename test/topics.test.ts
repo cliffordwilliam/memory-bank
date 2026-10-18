@@ -47,8 +47,8 @@ describe("list_topics", () => {
 
   it("refuses a token whose position was garbled (#2)", async () => {
     const first = await listTopics(db, { max_results: 1 });
-    for (const after of ["x", [1, 2], ["meals", "x"]]) {
-      const page_token = tamperToken(first.next_page_token!, (s) => (s.after = after));
+    for (const cursor of ["x", [1, 2], ["meals", "x"]]) {
+      const page_token = tamperToken(first.next_page_token!, (s) => (s.cursor = cursor));
       await expect(listTopics(db, { max_results: 1, page_token })).rejects.toThrow(
         "page_token isn't valid; repeat the call without it",
       );

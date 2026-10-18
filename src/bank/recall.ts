@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { BankError } from "../errors";
 import { describeNames } from "./lookups";
-import { afterState, decodePageToken, encodePageToken, fingerprintOf, offsetState, type PageState } from "./paging";
+import { cursorState, decodePageToken, encodePageToken, fingerprintOf, offsetState, type PageState } from "./paging";
 import type { RecalledRecord, RecallResult } from "./results";
 import { DEFAULT_RECALL_RESULTS, parse, recallInput, type RecallInput } from "./schemas";
 import { toFtsQuery } from "./search";
@@ -17,8 +17,8 @@ export const TRUNCATED_BODY = 500;
 
 /** The page token each order continues from: a time or an id, or an offset. */
 const pageStates = {
-  occurred_at: afterState(z.string()),
-  created_at: afterState(z.int()),
+  occurred_at: cursorState(z.string()),
+  created_at: cursorState(z.int()),
   relevance: offsetState,
 };
 
@@ -82,7 +82,7 @@ async function recallByFilters(db: D1Database, input: RecallInput): Promise<Reca
     orderBy,
     direction,
     limit: maxResults + 1, // one extra, to know whether there's a next page
-    after: page?.after,
+    cursor: page?.cursor,
     offset,
   });
 
@@ -94,7 +94,7 @@ async function recallByFilters(db: D1Database, input: RecallInput): Promise<Reca
     next = encodePageToken(
       orderBy === "relevance"
         ? { f: fingerprint, offset: offset + maxResults }
-        : { f: fingerprint, after: [orderBy === "occurred_at" ? last.occurred_at_utc : last.id, last.id] },
+        : { f: fingerprint, cursor: [orderBy === "occurred_at" ? last.occurred_at_utc : last.id, last.id] },
     );
   }
 

@@ -13,7 +13,7 @@ export interface PageState {
   /** Fingerprint of the filters that produced the page. */
   f: string;
   /** Where to continue: the last row's sort key and id, or an offset. */
-  after?: [string | number, number];
+  cursor?: [string | number, number];
   offset?: number;
 }
 
@@ -24,8 +24,8 @@ export async function fingerprintOf(filters: unknown[]): Promise<string> {
 }
 
 /** A token continuing after the last row's sort key and id. */
-export const afterState = <K extends z.ZodType>(key: K) =>
-  z.strictObject({ f: z.string(), after: z.tuple([key, z.int()]) });
+export const cursorState = <K extends z.ZodType>(key: K) =>
+  z.strictObject({ f: z.string(), cursor: z.tuple([key, z.int()]) });
 
 /** A token continuing at an offset (relevance order). */
 export const offsetState = z.strictObject({ f: z.string(), offset: z.int().nonnegative() });
