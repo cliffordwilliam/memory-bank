@@ -11,14 +11,14 @@ import { ConfigError } from "./errors";
 const settings = z.object({
   PUBLIC_URL: z
     .url({ protocol: /^https?$/, error: "must be an http(s) URL" })
-    // Zod runs this even when the URL check above already failed, and a
-    // refinement must never throw, so it only inspects text that parses.
-    .refine((value) => {
-      if (!URL.canParse(value)) return true; // already reported as not a URL
-      const url = new URL(value);
-      return url.pathname === "/" && !url.search && !url.hash;
-    }, "must be an origin only, e.g. https://memory-bank.example.workers.dev")
-    .transform((value) => new URL(value).origin),
+    // A pipe stops when the URL check above fails, so everything after it
+    // only ever sees a parsed URL.
+    .pipe(z.transform((value) => new URL(value)))
+    .refine(
+      (url) => url.pathname === "/" && !url.search && !url.hash,
+      "must be an origin only, e.g. https://memory-bank.example.workers.dev",
+    )
+    .transform((url) => url.origin),
   GITHUB_CLIENT_ID: z.string({ error: "must be set" }).min(1, "must be set"),
   GITHUB_CLIENT_SECRET: z.string({ error: "must be set" }).min(1, "must be set"),
   ALLOWED_GITHUB_ID: z
