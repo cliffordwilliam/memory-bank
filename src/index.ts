@@ -58,11 +58,27 @@ function oauthProvider(publicUrl: string): OAuthProvider<Env> {
   return provider;
 }
 
+/**
+ * The rate limit for the anonymous routes that write to KV, if this is one.
+ * The key is shared by everyone, because what it protects is the account's
+ * daily KV quota (and Cloudflare advises against keying on IP addresses).
+ */
+function rateLimit(request: Request, env: Env): RateLimit | undefined {
+  const { pathname } = new URL(request.url);
+  if (pathname === "/oauth/register" && request.method === "POST") return env.REGISTER_LIMIT;
+  if (pathname === "/authorize" && request.method === "GET") return env.AUTHORIZE_LIMIT;
+  return undefined;
+}
+
 export default {
   async fetch(request, env, ctx) {
     try {
       // Every request starts by validating the settings; a bad one refuses everyone.
       const { publicUrl } = readConfig(env);
+      const limit = rateLimit(request, env);
+      if (limit && !(await limit.limit({ key: "everyone" })).success) {
+        return new Response("Too many requests; try again in a minute.", { status: 429, headers: { "retry-after": "60" } });
+      }
       return await oauthProvider(publicUrl).fetch(request, env, ctx);
     } catch (error) {
       return errorResponse(error); // src/errors.ts: how each kind of error is answered

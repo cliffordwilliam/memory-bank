@@ -38,5 +38,14 @@
       "binding": "OAUTH_KV",
       "id": "0b42c438e5d7421d915ab09930244657"
     }
+  ],
+  // Client registration and the consent page need no login, and each request
+  // writes to KV, whose Free plan allows 1,000 writes a day. These limits slow
+  // a script down rather than stop it: counters are per Cloudflare location,
+  // and even 2 a minute adds up to 2,880 a day. A login needs one of each.
+  // namespace_id must be unique in the Cloudflare account.
+  "ratelimits": [
+    { "name": "REGISTER_LIMIT", "namespace_id": "7001", "simple": { "limit": 2, "period": 60 } },
+    { "name": "AUTHORIZE_LIMIT", "namespace_id": "7002", "simple": { "limit": 2, "period": 60 } }
   ]
 }

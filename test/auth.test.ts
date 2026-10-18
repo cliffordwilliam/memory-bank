@@ -288,3 +288,28 @@ describe("refusals", () => {
     expect(consent.status).toBe(500);
   });
 });
+
+describe("rate limits (issue #4)", () => {
+  // The suite runs with high limits (vitest.config.ts), so these swap in a
+  // limiter that has run out, the way the real one answers.
+  const spent = { limit: async () => ({ success: false }) };
+  const exhausted = { REGISTER_LIMIT: spent, AUTHORIZE_LIMIT: spent };
+  const request = (path: string, init: RequestInit = {}) =>
+    new Request(`${ORIGIN}${path}`, { ...init, headers: { host: "localhost:8787", ...init.headers } });
+
+  it.each([
+    ["client registration", request("/oauth/register", { method: "POST", body: "{}" })],
+    ["the consent page", request("/authorize?response_type=code")],
+  ])("refuses %s with 429 once the limit is spent", async (_, req) => {
+    const response = await callWorker(req, exhausted);
+    expect(response.status).toBe(429);
+    expect(response.headers.get("retry-after")).toBe("60");
+  });
+
+  it("leaves every other route alone", async () => {
+    const tokens = await ownerTokens();
+    expect((await callMcp(tokens.access_token, exhausted)).status).toBe(200);
+    expect((await callWorker(request("/"), exhausted)).status).toBe(200);
+    expect((await callWorker(request("/authorize", { method: "POST" }), exhausted)).status).not.toBe(429);
+  });
+});
