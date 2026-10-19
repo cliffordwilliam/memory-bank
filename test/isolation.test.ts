@@ -15,7 +15,7 @@ describe("each test starts from the same state", () => {
         "INSERT INTO records (name, occurred_at, description, body) VALUES ('leftover', '2026-10-19T12:00:00+07:00', 'leftover', 'leftover')",
       ),
       env.DB.prepare("INSERT INTO types (name, description) VALUES ('leftover', 'Left over.')"),
-      env.DB.prepare("INSERT INTO login_budget (day) VALUES (date('now'))"),
+      env.DB.prepare("INSERT INTO login_budget (day, n) VALUES (date('now'), 1)"),
     ]);
     await env.OAUTH_KV.put("leftover", "1");
     expect(await count("records")).toBe(1);

@@ -311,11 +311,13 @@ describe("refusals", () => {
 });
 
 describe("daily login budget (issue #8)", () => {
-  // Fills today's (or another day's) budget with n anonymous requests.
+  // Spends n more places of today's (or another day's) budget, numbered on
+  // from what's already spent, like real requests.
   const spend = (n: number, shift = "+0 days") =>
     env.DB.prepare(
-      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
-       INSERT INTO login_budget (day) SELECT date('now', ?) FROM n`,
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?1)
+       INSERT INTO login_budget (day, n)
+       SELECT date('now', ?2), coalesce((SELECT max(n) FROM login_budget WHERE day = date('now', ?2)), 0) + i FROM n`,
     )
       .bind(n, shift)
       .run();
@@ -344,6 +346,20 @@ describe("daily login budget (issue #8)", () => {
     expect((await callWorker(register(), {})).status).not.toBe(429);
     expect((await callWorker(consent(), {})).status).toBe(429);
     expect(await spentToday()).toBe(LOGIN_BUDGET);
+  });
+
+  it("reads only today's top row, so refused requests can't use up D1's daily reads", async () => {
+    await spend(LOGIN_BUDGET, "-1 day");
+    await spend(LOGIN_BUDGET);
+    // Every D1 statement's run(), to read rows_read on the real request path.
+    const run = vi.spyOn(Object.getPrototypeOf(env.DB.prepare("SELECT 1")), "run");
+    const response = await callWorker(consent(), {});
+    const results = await Promise.all(run.mock.results.map((r) => r.value));
+    run.mockRestore();
+    expect(response.status).toBe(429);
+    expect(results).toHaveLength(1);
+    // Counting today's rows read all 201 here; the top row is about 2.
+    expect(results[0].meta.rows_read).toBeLessThanOrEqual(2);
   });
 
   it("starts again each UTC day", async () => {

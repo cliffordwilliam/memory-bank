@@ -296,13 +296,19 @@ export async function queryTopics(db: D1Database, q: TopicQuery): Promise<{ tota
 /**
  * Counts one anonymous request against today's (UTC) budget, unless `budget`
  * of them already came today. True if it was counted. One statement, so two
- * requests at the same moment can't both take the last place.
+ * requests at the same moment can't both take the last place (the primary key
+ * refuses a second row with the same number).
+ *
+ * Each row holds its place in the day, so the check reads only today's top
+ * row: about 2 rows read whether or not the budget is spent, where counting
+ * read all ~200 (migration 0003). The max() must stay bare inside its own
+ * subquery; wrapped in coalesce() in the outer query, SQLite reads the whole day.
  */
 export async function spendLoginBudget(db: D1Database, budget: number): Promise<boolean> {
   const { meta } = await db
     .prepare(
-      `INSERT INTO login_budget (day)
-       SELECT date('now') WHERE (SELECT count(*) FROM login_budget WHERE day = date('now')) < ?`,
+      `WITH last AS (SELECT coalesce((SELECT max(n) FROM login_budget WHERE day = date('now')), 0) AS n)
+       INSERT INTO login_budget (day, n) SELECT date('now'), n + 1 FROM last WHERE n < ?`,
     )
     .bind(budget)
     .run();
