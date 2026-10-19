@@ -1,7 +1,7 @@
 // Phase 5: the login, the whole way Claude and a browser walk it (spec §11).
 import { env } from "cloudflare:workers";
 import { createExecutionContext } from "cloudflare:test";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { authHandler } from "../src/auth";
 import worker, { LOGIN_BUDGET } from "../src/index";
 import {
@@ -81,8 +81,6 @@ describe("discovery (what Claude reads first)", () => {
 });
 
 describe("the owner's login", () => {
-  let tokens: Tokens & { client_id: string };
-
   it("goes consent → GitHub → back to the client with a one-time code", async () => {
     const { final } = await login(OWNER);
     expect(final.origin + final.pathname).toBe("http://localhost:3000/callback");
@@ -109,13 +107,14 @@ describe("the owner's login", () => {
   });
 
   it("issues tokens that open /mcp", async () => {
-    tokens = await ownerTokens();
+    const tokens = await ownerTokens();
     const response = await callMcp(tokens.access_token);
     expect(response.status).toBe(200);
     expect(await response.text()).toContain('"name":"remember"');
   });
 
   it("refreshes to a new pair that also works", async () => {
+    const tokens = await ownerTokens();
     const response = await send("/oauth/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -312,8 +311,6 @@ describe("refusals", () => {
 });
 
 describe("daily login budget (issue #8)", () => {
-  // D1 keeps rows between tests in a file, so each starts with an unspent budget.
-  beforeEach(() => env.DB.prepare("DELETE FROM login_budget").run());
   // Fills today's (or another day's) budget with n anonymous requests.
   const spend = (n: number, shift = "+0 days") =>
     env.DB.prepare(

@@ -1,13 +1,14 @@
 // Phase 4: the whole request, the way Claude sends it. Each test posts
 // JSON-RPC to the Worker's real fetch handler (no network) and reads the
-// response, like FastAPI's TestClient. Its own file, so the bank starts empty.
+// response, like FastAPI's TestClient. Each test starts with an empty bank.
 import { env, exports } from "cloudflare:workers";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { ownerTokens } from "./oauth";
 
-// /mcp needs a token since phase 5: log in once, as the owner, for the whole file.
+// /mcp needs a token since phase 5. Storage is reset before each test, so each
+// logs in again, as the owner.
 let auth: Record<string, string> = {};
-beforeAll(async () => {
+beforeEach(async () => {
   auth = { authorization: `Bearer ${(await ownerTokens()).access_token}` };
 });
 
@@ -171,6 +172,14 @@ describe("MCP over HTTP", () => {
   });
 
   it("returns the bank's own rule errors as fixable tool errors", async () => {
+    await callTool("remember", {
+      name: "medication",
+      new_name: true,
+      type: "log",
+      description: "Dose",
+      body: "400 mg",
+      occurred_at: NOW_ISH,
+    });
     const result = await callTool("remember", {
       name: "meds",
       description: "Dose",
@@ -178,7 +187,7 @@ describe("MCP over HTTP", () => {
       occurred_at: NOW_ISH,
     });
     expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toMatch(/^name 'meds' doesn't exist\. Existing names: .* pass new_name=true/);
+    expect(result.content[0]!.text).toMatch(/^name 'meds' doesn't exist\. Existing names: medication \(log\).* pass new_name=true/);
   });
 
   it("returns argument errors with the field name and our message", async () => {
@@ -194,7 +203,7 @@ describe("MCP over HTTP", () => {
     expect(result.isError).toBe(true);
     const text = result.content[0]!.text;
     expect(text).toContain("name: must be lowercase letters, digits and hyphens");
-    expect(text).toContain("type: must be one of: feedback, idea, log, project, reference, user");
+    expect(text).toContain("type: must be one of: feedback, log, project, reference, user");
     expect(text).toContain("occurred_at: must be a real wall-clock time with offset");
     expect(text).toMatch(/source/); // unknown parameters are refused
   });

@@ -1,19 +1,23 @@
-// Phase 3: list_topics (spec §7.3). Its own file, so it starts with an empty bank.
+// Phase 3: list_topics (spec §7.3). Each test starts with an empty bank.
 import { describe, expect, it } from "vitest";
 import { listTopics } from "../src/bank";
 import { db, save, tamperToken } from "./helpers";
 
 describe("list_topics", () => {
+  /** Three names: memory-bank (newest), meals (two records), vanilla-cupcakes. */
+  async function seed() {
+    await save({ name: "meals", description: "Oatmeal", occurred_at: "2026-10-15T07:00:00+07:00" });
+    await save({ name: "vanilla-cupcakes", type: "reference", description: "Vanilla cupcakes, makes 12" });
+    await save({ name: "meals", description: "Fried rice", occurred_at: "2026-10-15T19:00:00+07:00" });
+    return save({ name: "memory-bank", type: "project", description: "Phase 3 in progress" });
+  }
+
   it("is empty on an empty bank", async () => {
     expect(await listTopics(db, {})).toEqual({ topics: [], total: 0 });
   });
 
   it("lists names by latest activity, with counts and the latest record", async () => {
-    await save({ name: "meals", description: "Oatmeal", occurred_at: "2026-10-15T07:00:00+07:00" });
-    await save({ name: "vanilla-cupcakes", type: "reference", description: "Vanilla cupcakes, makes 12" });
-    await save({ name: "meals", description: "Fried rice", occurred_at: "2026-10-15T19:00:00+07:00" });
-    const head = await save({ name: "memory-bank", type: "project", description: "Phase 3 in progress" });
-
+    const head = await seed();
     const { topics, total } = await listTopics(db, {});
     expect(total).toBe(3);
     expect(topics.map((t) => t.name)).toEqual(["memory-bank", "meals", "vanilla-cupcakes"]);
@@ -29,12 +33,14 @@ describe("list_topics", () => {
   });
 
   it("filters by type and checks the type", async () => {
+    await seed();
     const { topics } = await listTopics(db, { type: "log" });
     expect(topics.map((t) => t.name)).toEqual(["meals"]);
     await expect(listTopics(db, { type: "health" })).rejects.toThrow("type: must be one of:");
   });
 
   it("pages with nothing skipped or repeated", async () => {
+    await seed();
     const all = (await listTopics(db, {})).topics.map((t) => t.name);
     const first = await listTopics(db, { max_results: 2 });
     const second = await listTopics(db, { max_results: 2, page_token: first.next_page_token });
@@ -46,6 +52,7 @@ describe("list_topics", () => {
   });
 
   it("refuses a token whose position was garbled (#2)", async () => {
+    await seed();
     const first = await listTopics(db, { max_results: 1 });
     for (const cursor of ["x", [1, 2], ["meals", "x"]]) {
       const page_token = tamperToken(first.next_page_token!, (s) => (s.cursor = cursor));

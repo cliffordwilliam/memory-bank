@@ -339,7 +339,7 @@ Nothing else can change. Ids, record names, times, correction links and slugs ar
 - `wrangler` as a project dependency.
 - `nodejs` and `npm` from Arch `extra`. They run only the local tools; production runs on Cloudflare's own runtime.
 
-**Tests** run locally against a local D1:
+**Tests** run locally against a local D1. Every test starts from a freshly migrated, empty D1 and an empty KV: D1 refuses transactions and the test plugin isolates storage per file only, so `test/apply-migrations.ts` drops every table, reruns the migrations and clears KV before each test, and `test/isolation.test.ts` proves nothing carries over.
 - **Every rule, R1–R13.**
 - **Every trigger:** deletes refused, forbidden updates refused, the allowed admin updates work and set `modified_at`, a redaction refreshes the index.
 - **Corrections:**

@@ -234,6 +234,10 @@ describe("corrections", () => {
 
 describe("append-only", () => {
   it.each(["records", "names", "types"])("refuses deleting from %s", async (table) => {
+    // The triggers fire per row, so there must be rows to delete.
+    const name = uniqueName();
+    await createName(name);
+    await addRecord({ name });
     await expect(db.prepare(`DELETE FROM ${table}`).run()).rejects.toThrow(/append-only/);
   });
 

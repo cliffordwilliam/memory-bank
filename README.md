@@ -197,6 +197,8 @@ every pull request (`.github/workflows/test.yml`), with no secrets.
 Dependabot opens weekly update PRs for the pinned dependencies and the
 workflow's actions.
 
+Every test starts from a freshly migrated, empty database (`test/apply-migrations.ts`), so no test depends on another.
+
 The tests come in three layers:
 - **SQL:** the schema and triggers;
 - **the bank's operations;**
