@@ -116,6 +116,49 @@ To set it up, merge [`hooks/time-hook.json`](hooks/time-hook.json) into
 into the `+07:00` the bank expects. New sessions pick it up; in a running one,
 open `/hooks` once.
 
+**Turn off the built-in memory, so it doesn't mix with the bank.** Claude
+Code and claude.ai each have their own memory, written and rewritten by the
+model behind the scenes, which is exactly what this bank exists to avoid. With
+both on, Claude reads two memories that can disagree, saves things in one but
+not the other, and you can't tell which answer came from where. Keep the bank
+as the only memory:
+- **Claude Code:** set `"autoMemoryEnabled": false` in `~/.claude/settings.json`.
+- **claude.ai and the phone app:** under **Settings → Memory**, turn off
+  **Generate memory from chats** (*Pause memory* keeps what's there, *Reset
+  memory* deletes it for good) and **Search and reference chats**.
+
+**Tell Claude Code to read the bank at the start of a session.** The apps
+only use the bank when asked, so ask once, in `~/.claude/CLAUDE.md`, which
+every Claude Code session reads. Mine says:
+
+```markdown
+# Memory
+
+My memory lives in the Memory bank connector, shared with my other Claude
+apps. Claude Code's built-in auto memory is turned off.
+
+- At the start of a session, call list_topics, then recall my feedback and
+  user topics and follow them. Recall a project or reference topic when the
+  work touches it. This instruction is me asking you to read the bank.
+- Save only when I ask. When you learn something worth keeping (a correction,
+  a preference, a project's new state), suggest saving it in one line and wait
+  for my yes.
+- Never save secrets, tokens or keys.
+- If the bank is unreachable, say so and carry on.
+```
+
+**A routine for Claude Code that works well with the bank.** Since the bank
+carries what matters between sessions, old conversations aren't needed:
+- Start with plain `claude`: a fresh context, and the bank is read first.
+- Switching to something new? `/clear` gives a fresh context (fewer tokens,
+  better focus) without leaving the terminal.
+- `claude --continue` only to pick up an unfinished task after a restart, such
+  as after an update or to load a newly added connector.
+- Optionally, set `"cleanupPeriodDays": 1` in `~/.claude/settings.json`. Each
+  `/clear` leaves the old conversation on disk; Claude Code deletes session
+  data older than this many days when it starts (default 30, minimum 1), so
+  `/resume` then only reaches back a day.
+
 ## Deploying your own
 
 You need a Cloudflare account (free), a GitHub account and Node 22 or later.
