@@ -57,15 +57,15 @@ export function mockGitHub(
       throw new TypeError("Network connection lost.");
     }
     if (request.url === "https://github.com/login/oauth/access_token") {
-      const form = new URLSearchParams(await request.text());
-      const challenge = challenges.get(form.get("code") ?? "");
+      const form = await request.formData();
+      const challenge = challenges.get(String(form.get("code") ?? ""));
       const ok =
         !options.failTokenExchange &&
         form.get("client_id") === "test-github-client" &&
         form.get("client_secret") === "test-github-secret" &&
         form.get("redirect_uri") === `${ORIGIN}/callback` &&
         challenge !== undefined &&
-        (await s256(form.get("code_verifier") ?? "")) === challenge;
+        (await s256(String(form.get("code_verifier") ?? ""))) === challenge;
       return Response.json(ok ? { access_token: "gho_test", token_type: "bearer", scope: "" } : { error: "bad_verification_code" });
     }
     if (request.url === "https://api.github.com/user") {
