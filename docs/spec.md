@@ -335,6 +335,7 @@ Nothing else can change. Ids, record names, times, correction links and slugs ar
 - D1 (SQLite) for the bank; KV for OAuth.
 - MCP server: `createMcpHandler` (not `McpAgent`, which is deprecated).
 - OAuth: `workers-oauth-provider` with GitHub.
+- **The types table is read on every `/mcp` request, on purpose (#12).** `createBankServer` builds the tool schemas from `types` each time, so a type the owner adds is accepted at once (the enum also validates every tool call's arguments, not just the descriptions). Measured on the live database on 2026-10-19 (D1 insights, 7 days including two heavy dev days): 268 runs, 1,340 rows read in total, about 190 a day against the Free plan's 5 million (≈0.004%), 0.28 ms on average. A per-isolate cache would add state, delay a new type for up to its lifetime, and leak between tests behind the per-test reset; and claude.ai caches tool lists for hours anyway, so fresher descriptions gain nothing visible. Kept as is.
 - Input validation: Zod. The MCP SDK takes Zod schemas directly to build the tool definitions Claude sees, and Zod produces the friendly errors.
 - `wrangler` as a project dependency.
 - `nodejs` and `npm` from Arch `extra`. They run only the local tools; production runs on Cloudflare's own runtime.
