@@ -194,7 +194,7 @@ The description also tells Claude:
 
 | Input | Notes |
 |---|---|
-| `query` | **Keywords only, not the user's question.** The server quotes each word so search syntax can't break, combines them with OR and ranks by relevance (bm25). |
+| `query` | **Keywords only, not the user's question.** The server quotes each word so search syntax can't break, combines them with OR and ranks by relevance: bm25 over `description` and `body`. The topic `name` is indexed too, so a word from it finds the topic's records, but it adds nothing to the score: any record whose text matches ranks above records that match only by name, which follow newest first (#11). |
 | `ids` | Up to 3 ids, on their own (R12). Returns exactly those records with full bodies, wrong ones included. |
 | `name`, `type` | Exact filters. An unknown `name` is an error (R11). |
 | `after`, `before` | Wall-clock time with offset, filtering on when it happened (compared through `occurred_at_utc`). `after` includes the time given; `before` doesn't. |

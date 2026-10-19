@@ -203,7 +203,12 @@ export async function queryRecords(db: D1Database, q: RecordQuery): Promise<{ to
   let order: string;
   let offset = 0;
   if (q.orderBy === "relevance") {
-    order = "records_fts.rank, r.id DESC";
+    // bm25 weights per column (name, description, body): the topic name finds
+    // records but adds nothing to the score, so any record whose text matches
+    // ranks above records that match only by name, which tie and go newest
+    // first. Otherwise a big topic named after the word, full of short
+    // records, buries the text matches (#11).
+    order = "bm25(records_fts, 0, 1, 1), r.id DESC";
     offset = q.offset ?? 0;
   } else if (q.orderBy === "occurred_at") {
     order = `r.occurred_at_utc ${desc ? "DESC" : "ASC"}, r.id ${desc ? "DESC" : "ASC"}`;

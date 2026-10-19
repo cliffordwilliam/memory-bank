@@ -497,4 +497,38 @@ describe("search", () => {
     const { records } = await recall(db, { name, query: "garlic" });
     expect(records.map((r) => r.id)).toEqual([strong.id, weak.id]);
   });
+
+  describe("the topic name finds records but doesn't rank them (#11)", () => {
+    const foods = ["Oatmeal", "Fried rice", "Noodle soup", "Chicken salad", "Pasta", "Toast", "Curry", "Sushi", "Pho", "Steak", "Tacos", "Ramen"];
+    const meals = async () => {
+      for (const food of foods) await save({ name: "meals", description: food, body: `Ate ${food.toLowerCase()}.` });
+    };
+
+    it("ranks a record whose text matches above a big topic named after the word", async () => {
+      await meals();
+      const plan = await save({ name: "diet-plan", type: "reference", body: "Prep three meals on Sunday and freeze them." });
+      const { records, total } = await recall(db, { query: "meals" });
+      expect(total).toBe(13);
+      expect(records[0]!.id).toBe(plan.id);
+    });
+
+    it("does so however long the matching text is", async () => {
+      await meals();
+      const plan = await save({
+        name: "diet-plan",
+        type: "reference",
+        body: `Prep three meals on Sunday. ${"Then shop, chop and freeze the rest. ".repeat(60)}`,
+      });
+      const mention = await save({ name: "meals", description: "Lunch with Sam", body: "Sam says these meals are his favourite." });
+      const { records } = await recall(db, { query: "meals" });
+      expect(records.slice(0, 2).map((r) => r.id).sort()).toEqual([plan.id, mention.id].sort());
+    });
+
+    it("still finds a topic's records by a word only its name has, newest first", async () => {
+      await meals();
+      const { records, total } = await recall(db, { query: "meals" });
+      expect(total).toBe(12);
+      expect(records.map((r) => r.description)).toEqual([...foods].reverse().slice(0, 10));
+    });
+  });
 });
