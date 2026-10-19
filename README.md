@@ -188,9 +188,14 @@ Backblaze B2) and keep a redacted text until they expire after 30 days.
 
 ```
 npm run dev         # local Worker on http://localhost:8787 (reads .dev.vars)
-npm test            # 148 tests against a local D1, inside Cloudflare's runtime
+npm test            # the tests, against a local D1, inside Cloudflare's runtime
 npm run typecheck   # regenerates the runtime types, then tsc
 ```
+
+GitHub Actions runs the typecheck and the tests on every push to `main` and
+every pull request (`.github/workflows/test.yml`), with no secrets.
+Dependabot opens weekly update PRs for the pinned dependencies and the
+workflow's actions.
 
 The tests come in three layers:
 - **SQL:** the schema and triggers;

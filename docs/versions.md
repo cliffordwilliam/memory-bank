@@ -2,6 +2,8 @@
 
 Every dependency in `package.json` is pinned to an exact version (no `^` or `~`), so an install today and an install in a year fetch the same code. `package-lock.json` pins everything those packages pull in as well. Upgrades are deliberate: change the version here and in `package.json`, read the changelog, and run the tests.
 
+Dependabot (`.github/dependabot.yml`) opens a PR each week for anything newer, keeping the pins exact, and the Test workflow runs on it. It doesn't edit this file: update the table in the same PR before merging.
+
 Versions chosen on 2026-10-16.
 
 ## Runtime dependencies (shipped to Cloudflare)

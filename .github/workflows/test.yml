@@ -1,0 +1,25 @@
+# Typecheck and test every push to main and every pull request (#10).
+# The tests run inside workerd with local D1 and KV, and their login
+# settings are in vitest.config.ts, so no secrets are needed.
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test

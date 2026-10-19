@@ -1,0 +1,14 @@
+# Weekly update PRs, so security fixes in pinned dependencies don't go
+# unnoticed (#10). The Test workflow runs on each one.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # Raise the pinned version to the new one, keeping exact pins exact.
+    versioning-strategy: increase
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
