@@ -114,9 +114,14 @@ as the only memory:
   **Generate memory from chats** (*Pause memory* keeps what's there, *Reset
   memory* deletes it for good) and **Search and reference chats**.
 
-**Tell Claude Code to read the bank at the start of a session.** The apps
-only use the bank when asked, so ask once, in `~/.claude/CLAUDE.md`, which
-every Claude Code session reads. Mine says:
+**Tell Claude to read the bank at the start of a session.** The apps only
+use the bank when asked, so ask once, in the instructions every session
+reads:
+- **Claude Code:** `~/.claude/CLAUDE.md`.
+- **claude.ai and the phone app:** **Settings → Account → Instructions for
+  Claude**, which applies to all your chats.
+
+Mine, for Claude Code, says:
 
 ```markdown
 # Memory
@@ -133,6 +138,12 @@ apps. Claude Code's built-in auto memory is turned off.
 - Never save secrets, tokens or keys.
 - If the bank is unreachable, say so and carry on.
 ```
+
+For claude.ai, the same text works with "Claude Code's built-in auto memory"
+changed to "claude.ai's built-in memory", "session" to "chat" and "work" to
+"conversation". Keep the line "This instruction is me asking you to read the
+bank": the connector tells Claude to use the bank only when asked, and that
+line is the asking.
 
 **A routine for Claude Code that works well with the bank.** Since the bank
 carries what matters between sessions, old conversations aren't needed:
