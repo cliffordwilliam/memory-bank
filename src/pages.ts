@@ -26,7 +26,11 @@ export function lockDown(headers: Headers): void {
   headers.set("x-frame-options", "DENY");
 }
 
-/** The page skeleton. `title` must already be escaped. */
+/**
+ * The page skeleton. `title` must already be escaped. Inline CSS only (the
+ * policy in lockDown allows nothing else): a card that follows the device's
+ * light or dark mode, with Allow as the main button.
+ */
 export function html(title: string, body: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -34,9 +38,17 @@ export function html(title: string, body: string): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 <style>
-  body { font-family: system-ui, sans-serif; max-width: 34rem; margin: 3rem auto; padding: 0 1rem; line-height: 1.5; }
-  button { font: inherit; padding: 0.5rem 1.25rem; margin-right: 0.5rem; cursor: pointer; }
+  :root { color-scheme: light dark; --accent: #1f6feb; --line: #8885; }
+  body { font-family: system-ui, sans-serif; line-height: 1.5; margin: 0; padding: 3rem 1rem; }
+  main { max-width: 32rem; margin: 0 auto; padding: 1.5rem 1.75rem; border: 1px solid var(--line); border-radius: 12px; }
+  h1 { font-size: 1.4rem; line-height: 1.3; margin-top: 0; }
+  form { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+  button { font: inherit; padding: 0.55rem 1.4rem; border: 1px solid var(--line); border-radius: 8px; background: transparent; color: inherit; cursor: pointer; }
+  button[value="approve"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 </style>
+<main>
 ${body}
+</main>
 </html>`;
 }
