@@ -7,12 +7,6 @@ export const db = env.DB;
 export const NOW = Date.parse("2026-10-16T03:00:00Z");
 export const clock = { now: NOW };
 
-let counter = 0;
-/** A fresh name per test, so tests in one file don't share chains. */
-export function uniqueName(prefix = "t"): string {
-  counter += 1;
-  return `${prefix}-${counter}`;
-}
 
 /** Saves a record with sensible defaults; creates the name on first use. */
 export async function save(fields: Record<string, unknown> & { name: string }) {

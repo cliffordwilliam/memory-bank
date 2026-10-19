@@ -1,13 +1,13 @@
 // Phase 3: the bank's operations and every rule R1–R13 (spec §6, §7).
 import { describe, expect, it } from "vitest";
 import { recall, remember } from "../src/bank";
-import { clock, db, NOW, save, tamperToken, uniqueName } from "./helpers";
+import { clock, db, NOW, save, tamperToken } from "./helpers";
 
 const rememberRaw = (input: unknown) => remember(db, input, clock);
 
 describe("remember", () => {
   it("creates a name with its first record, then adds on top of it", async () => {
-    const name = uniqueName();
+    const name = "test";
     const first = await rememberRaw({
       name,
       new_name: true,
@@ -31,13 +31,13 @@ describe("remember", () => {
 
   it("stores occurred_at exactly as sent, with or without seconds and fractions", async () => {
     for (const occurred_at of ["2026-10-15T21:00+07:00", "2026-10-15T21:00:00.25+07:00", "2026-10-15T14:00:00Z"]) {
-      const saved = await save({ name: uniqueName(), occurred_at });
+      const saved = await save({ name: "test", occurred_at });
       expect(saved.occurred_at).toBe(occurred_at);
     }
   });
 
   it("R1: a new name needs a known type", async () => {
-    const base = { name: uniqueName(), new_name: true, description: "d", body: "b", occurred_at: "2026-10-15T21:00:00+07:00" };
+    const base = { name: "test", new_name: true, description: "d", body: "b", occurred_at: "2026-10-15T21:00:00+07:00" };
     await expect(rememberRaw(base)).rejects.toThrow("type: must be one of: feedback, log, project, reference, user");
     await expect(rememberRaw({ ...base, type: "health" })).rejects.toThrow("type: must be one of:");
   });
@@ -53,7 +53,7 @@ describe("remember", () => {
   });
 
   it("R3: new_name for an existing name is refused, naming its head", async () => {
-    const name = uniqueName();
+    const name = "test";
     const saved = await save({ name });
     await expect(save({ name, new_name: true, type: "log" })).rejects.toThrow(
       `'${name}' already exists (log, head #${saved.id}). Omit new_name to add a new version, or choose a different name.`,
@@ -61,7 +61,7 @@ describe("remember", () => {
   });
 
   it("R4: type is only for new names", async () => {
-    const name = uniqueName();
+    const name = "test";
     await save({ name });
     await expect(save({ name, type: "log" })).rejects.toThrow(
       `type is only for new names; '${name}' already exists (log). Omit type.`,
@@ -81,21 +81,21 @@ describe("remember", () => {
     ["a UTC moment before year 0000", "0000-01-01T00:00:00+07:00"],
     ["a UTC moment after year 9999", "9999-12-31T23:00:00-05:00"],
   ])("R5: refuses occurred_at with %s", async (_, occurred_at) => {
-    await expect(save({ name: uniqueName(), occurred_at })).rejects.toThrow(
+    await expect(save({ name: "test", occurred_at })).rejects.toThrow(
       "occurred_at: must be a real wall-clock time with offset, e.g. 2026-10-12T21:00:00+07:00",
     );
   });
 
   it("R5: accepts February 29 in a leap year", async () => {
-    await expect(save({ name: uniqueName(), occurred_at: "2028-02-29T12:00:00Z" })).rejects.toThrow(/future/);
-    await expect(save({ name: uniqueName(), occurred_at: "2024-02-29T12:00:00Z" })).resolves.toBeDefined();
+    await expect(save({ name: "test", occurred_at: "2028-02-29T12:00:00Z" })).rejects.toThrow(/future/);
+    await expect(save({ name: "test-2", occurred_at: "2024-02-29T12:00:00Z" })).resolves.toBeDefined();
   });
 
   it("R5: reads years 0000–0099 as written, not as 1900–1999", async () => {
     // Year 0 is a leap year in the proleptic Gregorian calendar SQLite uses; 1900 isn't.
-    await expect(save({ name: uniqueName(), occurred_at: "0000-02-29T12:00:00Z" })).resolves.toBeDefined();
+    await expect(save({ name: "test", occurred_at: "0000-02-29T12:00:00Z" })).resolves.toBeDefined();
 
-    const name = uniqueName();
+    const name = "test-2";
     const record = await save({ name, occurred_at: "0050-01-01T00:00:00Z" });
     const found = await recall(db, { name, after: "0049-12-31T00:00:00Z", before: "0050-01-02T00:00:00Z" });
     expect(found.records.map((r) => r.id)).toEqual([record.id]);
@@ -104,8 +104,8 @@ describe("remember", () => {
   it("R6: refuses a future time, with 5 minutes of slack", async () => {
     const inFourMinutes = new Date(NOW + 4 * 60_000).toISOString();
     const inSixMinutes = new Date(NOW + 6 * 60_000).toISOString();
-    await expect(save({ name: uniqueName(), occurred_at: inFourMinutes })).resolves.toBeDefined();
-    await expect(save({ name: uniqueName(), occurred_at: inSixMinutes })).rejects.toThrow(
+    await expect(save({ name: "test", occurred_at: inFourMinutes })).resolves.toBeDefined();
+    await expect(save({ name: "test-2", occurred_at: inSixMinutes })).rejects.toThrow(
       "occurred_at is in the future; check the date and offset",
     );
   });
@@ -114,32 +114,32 @@ describe("remember", () => {
     await expect(save({ name: "My Meds" })).rejects.toThrow(
       "name: must be lowercase letters, digits and hyphens (1–64 characters), e.g. vanilla-cupcakes",
     );
-    await expect(save({ name: uniqueName(), description: "two\nlines" })).rejects.toThrow(
+    await expect(save({ name: "test", description: "two\nlines" })).rejects.toThrow(
       "description: must be one line of at most 200 characters",
     );
-    await expect(save({ name: uniqueName(), description: "x".repeat(201) })).rejects.toThrow(
+    await expect(save({ name: "test-2", description: "x".repeat(201) })).rejects.toThrow(
       "description: must be one line of at most 200 characters",
     );
-    await expect(save({ name: uniqueName(), body: "x".repeat(17_240) })).rejects.toThrow(
+    await expect(save({ name: "test-3", body: "x".repeat(17_240) })).rejects.toThrow(
       "body: is 17240 characters; the limit is 16000",
     );
-    await expect(save({ name: uniqueName(), body: "x".repeat(16_000) })).resolves.toBeDefined();
+    await expect(save({ name: "test-4", body: "x".repeat(16_000) })).resolves.toBeDefined();
   });
 
   it("R7: counts characters the way SQLite does, so an emoji is one", async () => {
     // "🍰" is one character but two UTF-16 units.
-    await expect(save({ name: uniqueName(), body: "🍰".repeat(16_000) })).resolves.toBeDefined();
-    await expect(save({ name: uniqueName(), description: "🍰".repeat(200) })).resolves.toBeDefined();
-    await expect(save({ name: uniqueName(), body: "🍰".repeat(16_001) })).rejects.toThrow(
+    await expect(save({ name: "test", body: "🍰".repeat(16_000) })).resolves.toBeDefined();
+    await expect(save({ name: "test-2", description: "🍰".repeat(200) })).resolves.toBeDefined();
+    await expect(save({ name: "test-3", body: "🍰".repeat(16_001) })).rejects.toThrow(
       "body: is 16001 characters; the limit is 16000",
     );
-    await expect(save({ name: uniqueName(), description: "🍰".repeat(201) })).rejects.toThrow(
+    await expect(save({ name: "test-4", description: "🍰".repeat(201) })).rejects.toThrow(
       "description: must be one line of at most 200 characters",
     );
   });
 
   it("R8: corrects and kind go together", async () => {
-    const name = uniqueName();
+    const name = "test";
     const wrong = await save({ name });
     await expect(save({ name, corrects: wrong.id })).rejects.toThrow(
       "kind: is required with corrects (correction or retraction)",
@@ -151,8 +151,8 @@ describe("remember", () => {
   });
 
   it("R9: a correction points to an existing record of the same name", async () => {
-    const meals = uniqueName("meals");
-    const meds = uniqueName("meds");
+    const meals = "meals";
+    const meds = "meds";
     const meal = await save({ name: meals });
     await save({ name: meds });
     await expect(save({ name: meds, corrects: meal.id, kind: "correction" })).rejects.toThrow(
@@ -162,7 +162,7 @@ describe("remember", () => {
   });
 
   it("R10: a record is corrected once; a correction is corrected in turn", async () => {
-    const name = uniqueName();
+    const name = "test";
     const wrong = await save({ name, body: "ibuprofen" });
     const fix = await save({ name, body: "paracetamol", corrects: wrong.id, kind: "correction" });
     expect(fix).toMatchObject({ corrects: wrong.id, kind: "correction", previous_id: wrong.id });
@@ -173,7 +173,7 @@ describe("remember", () => {
   });
 
   it("refuses unknown parameters instead of ignoring them", async () => {
-    await expect(save({ name: uniqueName(), source: "web" })).rejects.toThrow(/Unrecognized key.*source/);
+    await expect(save({ name: "test", source: "web" })).rejects.toThrow(/Unrecognized key.*source/);
   });
 
   it("reports several problems at once", async () => {
@@ -215,7 +215,7 @@ describe("recall rules", () => {
 
 describe("recall by ids", () => {
   it("returns exactly those records with full bodies, wrong ones included", async () => {
-    const name = uniqueName();
+    const name = "test";
     const long = "x".repeat(2000);
     const wrong = await save({ name, body: long });
     const fix = await save({ name, body: long, corrects: wrong.id, kind: "correction" });
@@ -230,7 +230,7 @@ describe("recall by ids", () => {
 
 describe("recall by filters", () => {
   it("marks wrong records with their correction instead of hiding them", async () => {
-    const name = uniqueName();
+    const name = "test";
     const wrong = await save({ name, body: "ibuprofen" });
     const fix = await save({ name, body: "paracetamol", corrects: wrong.id, kind: "correction" });
     const retraction = await save({ name, body: "never took it", corrects: fix.id, kind: "retraction" });
@@ -251,7 +251,7 @@ describe("recall by filters", () => {
     const sundayBefore = "2026-10-11T09:00:00+07:00";
 
     it("a dose corrected to the Sunday before drops out of the week", async () => {
-      const name = uniqueName();
+      const name = "test";
       const wrong = await save({ name, occurred_at: monday });
       await save({ name, occurred_at: sundayBefore, corrects: wrong.id, kind: "correction" });
       expect((await recall(db, { name, ...week })).total).toBe(1); // without the filter, the wrong one shows
@@ -259,7 +259,7 @@ describe("recall by filters", () => {
     });
 
     it("a dose corrected into the week counts once, from the correction", async () => {
-      const name = uniqueName();
+      const name = "test";
       const wrong = await save({ name, occurred_at: sundayBefore });
       const fix = await save({ name, occurred_at: monday, corrects: wrong.id, kind: "correction" });
       const { records, total } = await recall(db, { name, ...week, current: true });
@@ -268,7 +268,7 @@ describe("recall by filters", () => {
     });
 
     it("a corrected then retracted dose counts zero", async () => {
-      const name = uniqueName();
+      const name = "test";
       const wrong = await save({ name, occurred_at: monday });
       const fix = await save({ name, occurred_at: monday, corrects: wrong.id, kind: "correction" });
       await save({ name, occurred_at: "2026-10-13T09:00:00+07:00", corrects: fix.id, kind: "retraction" });
@@ -277,7 +277,7 @@ describe("recall by filters", () => {
     });
 
     it("a chain counts only its last record", async () => {
-      const name = uniqueName();
+      const name = "test";
       const a = await save({ name, occurred_at: monday });
       const b = await save({ name, occurred_at: monday, corrects: a.id, kind: "correction" });
       const c = await save({ name, occurred_at: monday, corrects: b.id, kind: "correction" });
@@ -288,7 +288,7 @@ describe("recall by filters", () => {
     });
 
     it("pages through current records only, and keeps its token to itself", async () => {
-      const name = uniqueName();
+      const name = "test";
       const ids: number[] = [];
       for (let i = 0; i < 5; i++) {
         const wrong = await save({ name, occurred_at: monday });
@@ -319,7 +319,7 @@ describe("recall by filters", () => {
   });
 
   it("filters on when it happened: after inclusive, before exclusive, across midnight UTC", async () => {
-    const name = uniqueName();
+    const name = "test";
     // 06:00 on the 16th in +07:00 is 23:00 on the 15th in UTC.
     const morning = await save({ name, occurred_at: "2026-10-16T06:00:00+07:00" });
     const midnight = await save({ name, occurred_at: "2026-10-16T00:00:00+07:00" });
@@ -336,7 +336,7 @@ describe("recall by filters", () => {
   });
 
   it("orders by occurred_at with ties broken by id in the same direction", async () => {
-    const name = uniqueName();
+    const name = "test";
     const a = await save({ name, occurred_at: "2026-10-15T08:00:00+07:00" });
     const b = await save({ name, occurred_at: "2026-10-15T08:00:00+07:00" });
     const c = await save({ name, occurred_at: "2026-10-15T07:00:00+07:00" });
@@ -347,7 +347,7 @@ describe("recall by filters", () => {
   });
 
   it("created_at with max_results 1 is the head, even when it happened earlier", async () => {
-    const name = uniqueName("project");
+    const name = "project";
     await save({ name, occurred_at: "2026-10-15T09:00:00+07:00", body: "status on the 15th" });
     const head = await save({ name, occurred_at: "2026-10-03T09:00:00+07:00", body: "back on the 3rd we decided X" });
     const byCreated = await recall(db, { name, order_by: "created_at", max_results: 1 });
@@ -357,7 +357,7 @@ describe("recall by filters", () => {
   });
 
   it("filters by type", async () => {
-    const recipe = uniqueName("recipe");
+    const recipe = "recipe";
     await save({ name: recipe, type: "reference", body: "flour and sugar" });
     const { records } = await recall(db, { type: "reference", query: "flour" });
     expect(records.map((r) => r.name)).toContain(recipe);
@@ -365,7 +365,7 @@ describe("recall by filters", () => {
   });
 
   it("cuts bodies short when a page has more than 3 records, and only then", async () => {
-    const name = uniqueName();
+    const name = "test";
     const long = "y".repeat(800);
     for (let i = 0; i < 4; i++) await save({ name, body: long });
     const four = await recall(db, { name });
@@ -375,7 +375,7 @@ describe("recall by filters", () => {
   });
 
   it("cuts at a whole character, never through an emoji", async () => {
-    const name = uniqueName();
+    const name = "test";
     const body = `${"a".repeat(499)}🍜${"b".repeat(100)}`; // the 500th character is the emoji
     for (let i = 0; i < 4; i++) await save({ name, body });
     const { records } = await recall(db, { name });
@@ -387,7 +387,7 @@ describe("paging", () => {
   it.each(["newest", "oldest"] as const)(
     "walks %s through tied times with nothing skipped or repeated",
     async (direction) => {
-      const name = uniqueName();
+      const name = "test";
       const ids: number[] = [];
       for (let i = 0; i < 25; i++) {
         // Five records per moment, so every page boundary falls inside a tie.
@@ -410,7 +410,7 @@ describe("paging", () => {
   );
 
   it("pages by save order and by relevance too", async () => {
-    const name = uniqueName();
+    const name = "test";
     const ids: number[] = [];
     for (let i = 0; i < 12; i++) ids.push((await save({ name, body: `pancake breakfast ${i}` })).id);
 
@@ -429,7 +429,7 @@ describe("paging", () => {
   });
 
   it("refuses a token from a different query, or a broken one", async () => {
-    const name = uniqueName();
+    const name = "test";
     for (let i = 0; i < 3; i++) await save({ name });
     const page = await recall(db, { name, max_results: 1 });
     await expect(recall(db, { name, direction: "oldest", page_token: page.next_page_token })).rejects.toThrow(
@@ -439,7 +439,7 @@ describe("paging", () => {
   });
 
   it("pages through a query in any script, with short tokens (#1)", async () => {
-    const name = uniqueName();
+    const name = "test";
     const ids: number[] = [];
     for (const extra of ["日本", "🍜", "—"]) ids.push((await save({ name, body: `ラーメン ${extra}` })).id);
     const seen: number[] = [];
@@ -454,7 +454,7 @@ describe("paging", () => {
   });
 
   it("refuses a token whose position was garbled (#2)", async () => {
-    const name = uniqueName();
+    const name = "test";
     for (let i = 0; i < 3; i++) await save({ name, body: `pancake ${i}` });
     const byTime = (await recall(db, { name, max_results: 1 })).next_page_token!;
     const bySave = (await recall(db, { name, order_by: "created_at", max_results: 1 })).next_page_token!;
@@ -477,7 +477,7 @@ describe("paging", () => {
 
 describe("search", () => {
   it("handles punctuation, plurals and filler words", async () => {
-    const name = uniqueName("recipe");
+    const name = "recipe";
     const saved = await save({
       name,
       type: "reference",
@@ -491,7 +491,7 @@ describe("search", () => {
   });
 
   it("ranks the better match first", async () => {
-    const name = uniqueName();
+    const name = "test";
     const weak = await save({ name, description: "Dinner", body: "rice and a little garlic" });
     const strong = await save({ name, description: "Garlic bread", body: "garlic, garlic butter and more garlic" });
     const { records } = await recall(db, { name, query: "garlic" });
