@@ -12,41 +12,21 @@ server stores them exactly as sent.
 
 ## Why this exists
 
-Most memory tools for AI assistants run a model over your notes: they
-classify them, merge duplicates, resolve contradictions and write summaries.
-This bank deliberately doesn't. It was built because model rewriting distorts
-notes, and an earlier experiment of mine showed it happening.
+Claude's built-in memories don't cross over: claude.ai (web and phone) keeps
+one, Claude Code keeps another, and a new Claude Code session starts from
+what its own memory happened to write down. This bank is one memory they all
+share, so you can pick up a thought wherever you are.
 
-That experiment ("curator") tested a local memory for Claude Code with the
-same storage design as this bank: notes stored word for word, add-only, with
-corrections as new records. In its first version, a second Claude also
-rewrote, classified and summarized the notes. It failed in two ways:
+On the way home, from your phone: "I want to grow herbs on the balcony this
+spring, basil and mint, in a self-watering planter. Save it to the bank." At
+your desk, in a fresh Claude Code session: "Check the bank: what was my
+balcony idea?" Claude reads it back and you carry on from there, then save
+the plan you made, and your phone has it next time.
 
-- **It steered.** A summary said "X is the likely place to fix it", and every
-  later plan followed it into the wrong place.
-- **It distorted.** A note listing "examples: A, B, C" became "only A, B and C
-  exist".
-
-A later version kept the notes verbatim and had a fresh Claude answer recall
-questions from them. Tested blind against Claude Code's built-in memory on a
-real codebase (past commits replayed as tasks, fix plans scored 0–3 by a
-blind grader, three recalls per chain):
-
-| | Built-in memory | Curator (verbatim, add-only) |
-|---|---|---|
-| Plan scores, pilot chain | 2 / 2 / 2 | 2 / 2 / 2 |
-| Plan scores, held-out chain | 2 / 3 / 2 | 3 / 3 / 2 |
-| Confidently wrong answers | none | none |
-| Irrelevant share of memory context | 40–60% | 35–55% |
-| Extra cost per chain | – | ~$0.89–1.59 (the curator was a Claude) |
-| Recall time | ~45 s | ~90–120 s |
-
-Each cell is a single run, and there were only two chains, so this is
-evidence rather than proof. What it supports: **a verbatim, add-only store
-held up at least as well as built-in memory, and the model layer on top
-added cost and delay without clearly helping.** So this bank keeps the store
-and drops the model. What the tests don't show is whether one central bank
-is worth having. That's the part this project is for.
+What goes in stays as Claude wrote it. No model summarizes, merges or
+rewrites your notes behind the scenes, and nothing is edited or deleted:
+changes are new records on top of the old ones, so you can always see what
+was said and when.
 
 ## How it works
 
@@ -161,7 +141,10 @@ carries what matters between sessions, old conversations aren't needed:
 
 ## Deploying your own
 
-You need a Cloudflare account (free), a GitHub account and Node 22 or later.
+One person, one bank: the login lets in a single GitHub account, so everyone
+who wants one deploys their own. You need a Cloudflare account (free), a
+GitHub account and Node 22 or later, and a Claude plan that supports custom
+connectors (check [Anthropic's help center](https://support.claude.com/en/articles/11175166-getting-started-with-custom-connectors-using-remote-mcp)).
 
 1. **Clone and install:** `npm install`.
 2. **Two GitHub OAuth apps**, under GitHub Settings → Developer settings → OAuth Apps:
@@ -183,8 +166,7 @@ You need a Cloudflare account (free), a GitHub account and Node 22 or later.
    npx wrangler d1 create memory-bank
    npx wrangler kv namespace create OAUTH_KV
    ```
-   Put both ids into `wrangler.jsonc`, then run
-   `npx wrangler d1 migrations apply memory-bank --remote`.
+   Put both ids into `wrangler.jsonc`.
 5. **Production settings**, entered as secrets (only the names are in `wrangler.jsonc`):
    ```
    npx wrangler secret put PUBLIC_URL             # https://memory-bank.<subdomain>.workers.dev
@@ -193,14 +175,69 @@ You need a Cloudflare account (free), a GitHub account and Node 22 or later.
    npx wrangler secret put ALLOWED_GITHUB_ID      # your numeric GitHub id
    ```
    `wrangler secret bulk <file>` uploads a dotenv file in one go.
-6. **Deploy:** `npx wrangler deploy`. It refuses to go out while any of the
-   four settings is missing. Check that
+6. **Deploy:** `npm run deploy`. It creates the database tables (applying
+   the migrations in `migrations/`, after asking you to confirm), then
+   deploys the Worker, which refuses to go out while any of the four settings
+   is missing. Check that
    `https://memory-bank.<subdomain>.workers.dev/.well-known/oauth-protected-resource/mcp`
    shows your address, then connect Claude as above.
 
 **Every setting fails closed.** A missing secret, a non-numeric allowed id or
 a malformed URL means nobody gets in: the bank answers `500 This memory bank
 isn't configured yet.` and the Worker log names the problem.
+
+## Updating
+
+```
+git pull
+npm ci
+npm run deploy
+```
+
+`npm run deploy` first applies any new database migrations, then deploys the
+code that needs them; with nothing new it says `No migrations to apply!` and
+deploys. Always deploy this way: a plain `wrangler deploy` skips the
+migrations, and new code on an old database fails.
+
+**Claude may keep seeing the old tools for a while.** After an update that
+changes the tools (a new field, a reworded description), claude.ai can keep
+showing Claude the old definitions for hours or longer. It caches each
+connector's tool list on its own servers, and restarting Claude or
+reconnecting the connector doesn't reliably refresh it. Nothing on your side
+can force it; changes here are kept compatible with the old definitions, so
+the bank keeps working in the meantime.
+
+## Your data
+
+**Where it lives.** Your records are in your own Cloudflare D1 database and
+nowhere else; the bank's only outbound calls are to GitHub during login and
+to fetch a connecting app's public metadata. What Claude reads from the bank
+becomes part of that conversation, like anything else you tell Claude.
+
+**What protects it.** Cloudflare encrypts D1 on disk and in transit
+([AES-256 and TLS, with keys Cloudflare manages](https://developers.cloudflare.com/d1/reference/data-security/)),
+but the bank adds no encryption of its own: anyone who can sign in to your
+Cloudflare account can read every record. Encrypting inside the bank wouldn't
+change that. The Worker has to read the text to search it and hand it to
+Claude, so its key would sit in the same Cloudflare account as the data, in
+reach of the very person it would be meant to stop. So the bank is as private
+as your accounts: use a strong password and two-factor login on Cloudflare,
+on GitHub (it's the bank's login), and wherever your backups go.
+
+**Backups are up to you.** D1's Time Travel can restore the database to any
+moment in the last 7 days (on the free plan), but that's all the bank keeps on
+its own. One way to do more, and the way mine works: a nightly GitHub Action
+in a separate, private repo exports the three tables of bank data, with a
+Cloudflare API token as a secret:
+
+```
+npx wrangler d1 export memory-bank --remote --no-schema \
+  --table types --table names --table records --output backup.sql
+```
+
+and uploads the file to a private storage bucket that keeps 30 days. To restore
+into a freshly migrated database, turn the export's `types` inserts into
+upserts first, since the migrations already insert the default types.
 
 ## Admin (only you can do these)
 
@@ -223,9 +260,8 @@ npx wrangler d1 execute memory-bank --remote --command "UPDATE types SET descrip
 ```
 
 D1's Time Travel can still restore a redacted text for a few days after the
-edit, as a safety net. So can backups: mine are taken nightly by a separate
-private repo (a GitHub Action that exports the three tables as SQL to
-Backblaze B2) and keep a redacted text until they expire after 30 days.
+edit, as a safety net, and backups keep it until they expire (see
+[Your data](#your-data)).
 
 ## Development
 
