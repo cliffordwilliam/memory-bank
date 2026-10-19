@@ -67,6 +67,13 @@ can't steer Claude. The full design is in [`docs/spec.md`](docs/spec.md).
 
 **Claude only uses the bank when you ask:** "save this to the bank", "check
 the bank: what did I eat last week?". It never uses it on its own initiative.
+That's deliberate. Nothing in the bank can be deleted by Claude, and
+everything in it reaches every Claude app you use, so what goes in should be
+what you chose to put there. Something saved by mistake, like a password or a
+private detail, stays and shows up elsewhere until you redact it by hand
+([Admin](#admin-only-you-can-do-these)), and backups keep it until they
+expire. Reading only when asked keeps your notes out of conversations they
+don't belong in.
 
 **Connecting:**
 1. Go to claude.ai → **Customize → Connectors → + Add → Add custom connector**.
