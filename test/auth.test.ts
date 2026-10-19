@@ -1,9 +1,9 @@
 // Phase 5: the login, the whole way Claude and a browser walk it (spec §11).
 import { env } from "cloudflare:workers";
 import { createExecutionContext } from "cloudflare:test";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { authHandler } from "../src/auth";
-import worker from "../src/index";
+import worker, { LOGIN_BUDGET } from "../src/index";
 import {
   CookieJar,
   decide,
@@ -311,27 +311,67 @@ describe("refusals", () => {
   });
 });
 
-describe("rate limits (issue #4)", () => {
-  // The suite runs with high limits (vitest.config.ts), so these swap in a
-  // limiter that has run out, the way the real one answers.
-  const spent = { limit: async () => ({ success: false }) };
-  const exhausted = { REGISTER_LIMIT: spent, AUTHORIZE_LIMIT: spent };
+describe("daily login budget (issue #8)", () => {
+  // D1 keeps rows between tests in a file, so each starts with an unspent budget.
+  beforeEach(() => env.DB.prepare("DELETE FROM login_budget").run());
+  // Fills today's (or another day's) budget with n anonymous requests.
+  const spend = (n: number, shift = "+0 days") =>
+    env.DB.prepare(
+      `WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < ?)
+       INSERT INTO login_budget (day) SELECT date('now', ?) FROM n`,
+    )
+      .bind(n, shift)
+      .run();
+  const spentToday = async () =>
+    (await env.DB.prepare("SELECT count(*) AS n FROM login_budget WHERE day = date('now')").first<{ n: number }>())!.n;
   const request = (path: string, init: RequestInit = {}) =>
     new Request(`${ORIGIN}${path}`, { ...init, headers: { host: "localhost:8787", ...init.headers } });
+  const register = () => request("/oauth/register", { method: "POST", body: "{}" });
+  const consent = () => request("/authorize?response_type=code");
 
   it.each([
-    ["client registration", request("/oauth/register", { method: "POST", body: "{}" })],
-    ["the consent page", request("/authorize?response_type=code")],
-  ])("refuses %s with 429 once the limit is spent", async (_, req) => {
-    const response = await callWorker(req, exhausted);
+    ["client registration", register],
+    ["the consent page", consent],
+  ])("refuses %s with 429 until 00:00 UTC once today's budget is spent", async (_, req) => {
+    await spend(LOGIN_BUDGET);
+    const response = await callWorker(req(), {});
     expect(response.status).toBe(429);
-    expect(response.headers.get("retry-after")).toBe("60");
+    const midnight = new Date().setUTCHours(24, 0, 0, 0);
+    const retryAfter = Number(response.headers.get("retry-after"));
+    expect(Math.abs(retryAfter - (midnight - Date.now()) / 1000)).toBeLessThan(5);
   });
 
-  it("leaves every other route alone", async () => {
-    const tokens = await ownerTokens();
-    expect((await callMcp(tokens.access_token, exhausted)).status).toBe(200);
-    expect((await callWorker(request("/"), exhausted)).status).toBe(200);
-    expect((await callWorker(request("/authorize", { method: "POST" }), exhausted)).status).not.toBe(429);
+  it("counts both routes and stops exactly at the budget", async () => {
+    await spend(LOGIN_BUDGET - 2);
+    expect((await callWorker(consent(), {})).status).not.toBe(429);
+    expect((await callWorker(register(), {})).status).not.toBe(429);
+    expect((await callWorker(consent(), {})).status).toBe(429);
+    expect(await spentToday()).toBe(LOGIN_BUDGET);
+  });
+
+  it("starts again each UTC day", async () => {
+    await spend(LOGIN_BUDGET, "-1 day");
+    expect((await callWorker(consent(), {})).status).not.toBe(429);
+    expect(await spentToday()).toBe(1);
+  });
+
+  it("leaves connected apps alone: /mcp, token refresh and the rest still work", async () => {
+    const tokens = await ownerTokens(); // this login spends two places
+    await spend(LOGIN_BUDGET);
+    const spent = await spentToday();
+    expect((await callMcp(tokens.access_token)).status).toBe(200);
+    const refresh = await send("/oauth/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "refresh_token",
+        refresh_token: tokens.refresh_token,
+        client_id: tokens.client_id,
+      }),
+    });
+    expect(refresh.status).toBe(200);
+    expect((await callWorker(request("/"), {})).status).toBe(200);
+    expect((await callWorker(request("/authorize", { method: "POST" }), {})).status).not.toBe(429);
+    expect(await spentToday()).toBe(spent);
   });
 });

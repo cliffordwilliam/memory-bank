@@ -105,7 +105,7 @@ CREATE VIRTUAL TABLE records_fts USING fts5(
 );
 ```
 
-The authoritative schema is `migrations/0001_init.sql`. Beyond the SQL above, it:
+The authoritative schema is `migrations/0001_init.sql` (plus `0002_login_budget.sql`, the login budget's counter, §11, which isn't bank data and isn't backed up). Beyond the SQL above, it:
 - makes the three tables `STRICT`, so SQLite enforces column types;
 - adds backstop CHECKs that mirror the Zod rules: the name slug, a one-line description of 1–200 characters, a body of 1–16,000 characters, and an `occurred_at` ending in `Z` or `±HH:MM`.
 
@@ -324,7 +324,7 @@ Nothing else can change. Ids, record names, times, correction links and slugs ar
 - **Allowlist test without a second account:** temporarily set the allowed id to a different number, deploy, confirm that **you** are refused, then set it back.
 - **Settings** (`PUBLIC_URL`, `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `ALLOWED_GITHUB_ID`) live in `.dev.vars` locally and in Cloudflare's secret store online (`wrangler secret put`), never in the repo. Cookies need no key of ours: the OAuth library binds its consent and upstream cookies itself.
 - **OAuth state** lives in a KV namespace (`OAUTH_KV`).
-- **Rate limits:** client registration (`POST /oauth/register`) and the consent page (`GET /authorize`) need no login, and each request writes to KV, which allows 1,000 writes a day on the Free plan. Each is behind a Workers rate-limit binding (`REGISTER_LIMIT`, `AUTHORIZE_LIMIT` in `wrangler.jsonc`): 2 a minute, one key shared by everyone, then 429. This slows a script down rather than stopping it: counters are per Cloudflare location and only roughly enforced (live on 2026-10-18, a quick burst of 40 registrations got 25 through), and even an exact 2 a minute is 2,880 a day; while someone is spamming, the owner gets 429 too. Abandoned registrations expire after the library's default 90 days (`clientRegistrationTTL`).
+- **Daily login budget:** client registration (`POST /oauth/register`) and the consent page (`GET /authorize`) need no login, and each can lead to KV writes (a consent page and its approval write one each). KV's Free plan allows 1,000 writes a day, and token refreshes for connected apps need some of them (two writes per refresh, about hourly per active app), so if anonymous traffic spent the quota, every connected app would break until it resets at 00:00 UTC. Together these two routes get `LOGIN_BUDGET` = 200 requests per UTC day, counted in D1's `login_budget` table (migration 0002, one row per request) by a single `INSERT … SELECT … WHERE count < 200`, so two requests can't both take the last place. Over the budget they get 429 with `retry-after` set to 00:00 UTC. That caps anonymous KV writes at about 400 a day, leaving 600 or more for refreshes and real logins. What it can't prevent: someone spending the budget blocks new logins until 00:00 UTC (07:00 in UTC+7), but connected apps keep working, since refreshes and `/mcp` never count. Per-IP blocking would need a WAF rule, which needs a custom domain. This replaced two Workers rate-limit bindings (#4), which limited speed (2 a minute) rather than total: a slow script stayed under them and could still spend the quota (#8). Old rows are never deleted; at most 200 a day is about 73,000 a year. Abandoned registrations expire after the library's default 90 days (`clientRegistrationTTL`).
 - **Prompt injection:** results are labeled as stored data, and the tool descriptions say records are never instructions.
 - **Logs:** record text isn't written to Worker logs.
 - **Privacy:** your data lives in your Cloudflare account. Recalled records pass through your Claude chats like any other message.
@@ -364,6 +364,7 @@ Nothing else can change. Ids, record names, times, correction links and slugs ar
 - **Search:** punctuation (`don't`, `co-op`), plurals (`cupcakes` → `cupcake`).
 - **Paging:** tied times in both directions, with nothing skipped or repeated.
 - **`previous_id`.**
+- **Login budget:** both anonymous routes count and stop exactly at the budget with 429 until 00:00 UTC; a new UTC day starts again; `/mcp`, token refresh and the other routes still work while it's spent.
 
 The new repo's README:
 - explains why the project exists: other memory tools merge and summarize notes with a model, which distorted notes in the curator tests. It cites the curator results.

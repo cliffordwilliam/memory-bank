@@ -19,12 +19,6 @@ export default defineConfig(async () => {
             GITHUB_CLIENT_SECRET: "test-github-secret",
             ALLOWED_GITHUB_ID: "1001",
           },
-          // The real limits (wrangler.jsonc) would refuse the suite's many
-          // logins; auth.test.ts checks the refusal itself.
-          ratelimits: {
-            REGISTER_LIMIT: { namespace_id: "7001", simple: { limit: 1000, period: 60 } },
-            AUTHORIZE_LIMIT: { namespace_id: "7002", simple: { limit: 1000, period: 60 } },
-          },
         },
       }),
     ],

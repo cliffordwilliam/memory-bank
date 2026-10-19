@@ -11,6 +11,7 @@
 import { OAuthProvider } from "@cloudflare/workers-oauth-provider";
 import { createMcpHandler } from "agents/mcp/server";
 import { authHandler } from "./auth";
+import { spendLoginBudget } from "./bank/store";
 import { readConfig, type Props } from "./config";
 import { errorResponse } from "./errors";
 import { createBankServer } from "./mcp";
@@ -59,15 +60,25 @@ function oauthProvider(publicUrl: string): OAuthProvider<Env> {
 }
 
 /**
- * The rate limit for the anonymous routes that write to KV, if this is one.
- * The key is shared by everyone, because what it protects is the account's
- * daily KV quota (and Cloudflare advises against keying on IP addresses).
+ * How many requests a UTC day may send to the anonymous routes that write to
+ * KV (issue #8). Each can lead to two KV writes (consent page, then approval),
+ * so this keeps them under 400 of the Free plan's 1,000 a day, leaving the
+ * rest for token refreshes: connected apps keep working while it's spent.
  */
-function rateLimit(request: Request, env: Env): RateLimit | undefined {
+export const LOGIN_BUDGET = 200;
+
+/** Whether this request needs no login and writes to KV. */
+function spendsBudget(request: Request): boolean {
   const { pathname } = new URL(request.url);
-  if (pathname === "/oauth/register" && request.method === "POST") return env.REGISTER_LIMIT;
-  if (pathname === "/authorize" && request.method === "GET") return env.AUTHORIZE_LIMIT;
-  return undefined;
+  return (
+    (pathname === "/oauth/register" && request.method === "POST") ||
+    (pathname === "/authorize" && request.method === "GET")
+  );
+}
+
+/** Seconds until 00:00 UTC, when the budget (and KV's quota) starts again. */
+function secondsToUtcMidnight(): number {
+  return Math.ceil((new Date().setUTCHours(24, 0, 0, 0) - Date.now()) / 1000);
 }
 
 export default {
@@ -75,9 +86,11 @@ export default {
     try {
       // Every request starts by validating the settings; a bad one refuses everyone.
       const { publicUrl } = readConfig(env);
-      const limit = rateLimit(request, env);
-      if (limit && !(await limit.limit({ key: "everyone" })).success) {
-        return new Response("Too many requests; try again in a minute.", { status: 429, headers: { "retry-after": "60" } });
+      if (spendsBudget(request) && !(await spendLoginBudget(env.DB, LOGIN_BUDGET))) {
+        return new Response("Today's login budget is used up; try again after 00:00 UTC.", {
+          status: 429,
+          headers: { "retry-after": String(secondsToUtcMidnight()) },
+        });
       }
       return await oauthProvider(publicUrl).fetch(request, env, ctx);
     } catch (error) {

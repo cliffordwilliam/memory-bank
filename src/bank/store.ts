@@ -285,3 +285,21 @@ export async function queryTopics(db: D1Database, q: TopicQuery): Promise<{ tota
     rows: pageResult!.results as TopicRow[],
   };
 }
+
+// ── login budget ────────────────────────────────────────────────────────────
+
+/**
+ * Counts one anonymous request against today's (UTC) budget, unless `budget`
+ * of them already came today. True if it was counted. One statement, so two
+ * requests at the same moment can't both take the last place.
+ */
+export async function spendLoginBudget(db: D1Database, budget: number): Promise<boolean> {
+  const { meta } = await db
+    .prepare(
+      `INSERT INTO login_budget (day)
+       SELECT date('now') WHERE (SELECT count(*) FROM login_budget WHERE day = date('now')) < ?`,
+    )
+    .bind(budget)
+    .run();
+  return meta.changes === 1;
+}
