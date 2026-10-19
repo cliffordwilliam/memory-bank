@@ -138,6 +138,10 @@ const recallShape = (type: TypeField) => ({
   before: wallClock
     .optional()
     .meta({ description: "Only things that happened before this wall-clock time with offset (exclusive)." }),
+  current: z
+    .literal(true, { error: "must be true, or left out" })
+    .optional()
+    .meta({ description: "true to leave out records that were corrected or retracted, and retraction records: only what still stands. Use it to count events; total is then the count." }),
   order_by: z
     .enum(["relevance", "occurred_at", "created_at"], { error: "must be relevance, occurred_at or created_at" })
     .optional()

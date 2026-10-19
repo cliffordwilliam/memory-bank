@@ -64,7 +64,9 @@ is worth having. That's the part this project is for.
 - **Nothing is edited or deleted.** If something was wrong, a new record
   points at it with `corrects` and says whether it was a `correction` or a
   `retraction`. The wrong record then shows `corrected_by` wherever it
-  appears.
+  appears. To count things ("how many doses this week?"), Claude asks
+  recall for `current: true`, which leaves out wrong records and
+  retractions, so the total is the count.
 - **Every record keeps two times:**
   - when it happened (`occurred_at`), stored exactly as Claude sent it, in
     wall-clock time with your offset;

@@ -1,5 +1,6 @@
 // recall: read records, like a GET with filters and pages (spec §7.2).
-// Nothing is hidden: wrong records come back too, marked with corrected_by.
+// Nothing is hidden: wrong records come back too, marked with corrected_by,
+// unless Claude asks for current records only (to count events, #9).
 
 import { z } from "zod";
 import { BankError } from "../errors";
@@ -68,7 +69,7 @@ async function recallByFilters(db: D1Database, input: RecallInput): Promise<Reca
   }
   const fts = input.query !== undefined ? toFtsQuery(input.query) : undefined;
 
-  const fingerprint = await fingerprintOf([fts, input.name, input.type, after, before, orderBy, direction]);
+  const fingerprint = await fingerprintOf([fts, input.name, input.type, after, before, input.current, orderBy, direction]);
   const shape: z.ZodType<PageState> = pageStates[orderBy];
   const page = input.page_token ? decodePageToken(input.page_token, fingerprint, shape) : undefined;
   const offset = page?.offset ?? 0;
@@ -79,6 +80,7 @@ async function recallByFilters(db: D1Database, input: RecallInput): Promise<Reca
     type: input.type,
     afterUtc: after,
     beforeUtc: before,
+    current: input.current,
     orderBy,
     direction,
     limit: maxResults + 1, // one extra, to know whether there's a next page

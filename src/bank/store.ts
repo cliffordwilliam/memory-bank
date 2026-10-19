@@ -169,6 +169,8 @@ export interface RecordQuery {
   /** UTC bounds on occurred_at_utc: after inclusive, before exclusive. */
   afterUtc?: string;
   beforeUtc?: string;
+  /** Only records that still stand: not corrected, and not retractions. */
+  current?: boolean;
   orderBy: "relevance" | "occurred_at" | "created_at";
   direction: "newest" | "oldest";
   limit: number;
@@ -190,6 +192,7 @@ export async function queryRecords(db: D1Database, q: RecordQuery): Promise<{ to
   if (q.type !== undefined) (where.push("n.type = ?"), params.push(q.type));
   if (q.afterUtc !== undefined) (where.push("r.occurred_at_utc >= ?"), params.push(q.afterUtc));
   if (q.beforeUtc !== undefined) (where.push("r.occurred_at_utc < ?"), params.push(q.beforeUtc));
+  if (q.current) where.push("c.id IS NULL AND r.kind IS NOT 'retraction'");
 
   // Sorting, and where the next page continues. Ties always break by id in
   // the same direction, so every position is unique.

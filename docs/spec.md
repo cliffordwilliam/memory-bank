@@ -10,7 +10,7 @@ One memory bank that Claude reaches from claude.ai (web), the Claude phone app a
 2. **No AI model on the server.** Claude writes records and the server stores them exactly as sent. The server never adds to or changes Claude's text.
 3. **Add-only for Claude.** Claude can only add and read. Only you can change anything (§10), and nothing is ever deleted.
 4. **A record is the truth at the time it was written.** Newer records sit on top of older ones. A record that was simply *wrong* is pointed at by a correction or retraction, and the wrong record itself is never touched.
-5. **Everything is explicit, nothing is hidden.** Claude always sends the wall-clock time; the server never fills one in. `recall` is a plain GET: it returns every matching record with its correction links, and Claude decides how to read them.
+5. **Everything is explicit, nothing is hidden.** Claude always sends the wall-clock time; the server never fills one in. `recall` is a plain GET: it returns every matching record with its correction links, and Claude decides how to read them. The one exception is asked for explicitly: `current: true` leaves out wrong records and retractions, for counting.
 6. **Mirror Claude's existing memory.** Records carry Claude Code's memory fields (`name`, `description`, `type`, body), and claude.ai's word "topic" names the index tool.
 7. **Free and minimal.** Cloudflare free plan, three tools, nothing else.
 8. **Only you.** GitHub login, locked to your GitHub account.
@@ -198,6 +198,7 @@ The description also tells Claude:
 | `ids` | Up to 3 ids, on their own (R12). Returns exactly those records with full bodies, wrong ones included. |
 | `name`, `type` | Exact filters. An unknown `name` is an error (R11). |
 | `after`, `before` | Wall-clock time with offset, filtering on when it happened (compared through `occurred_at_utc`). `after` includes the time given; `before` doesn't. |
+| `current` | `true` or left out. Leaves out records with `corrected_by` and retraction records, so only what still stands comes back and `total` is the number of events. A correction is a record with the event's real time, so it comes back on its own when that time is in the range. Off by default (principle 5). |
 | `order_by` | `relevance` \| `occurred_at` (sorted through `occurred_at_utc`) \| `created_at`. Default: `relevance` with a query, otherwise `occurred_at`. `relevance` needs a `query`. `created_at` is save order, so with one `name` and `max_results=1` it returns that name's head. |
 | `direction` | `newest` \| `oldest`. Default `newest`; ignored for `relevance`, which is always best match first. Ties follow the same direction by `id`: `newest` puts the higher id first, `oldest` the lower. |
 | `max_results` | Default 10, max 20. |
@@ -219,7 +220,8 @@ Bodies:
 The response also includes `total` and `next_page_token`, and is wrapped in a label saying it's stored data.
 
 The description also tells Claude:
-- **A record with `corrected_by` was wrong** (corrected or retracted). Answer from the record that corrects it. When counting ("how many doses this week?"), a wrong record and its correction describe the *same* event, so count it once, from the correction. A retracted event counts zero, and the retraction record itself is never counted.
+- **A record with `corrected_by` was wrong** (corrected or retracted). Answer from the record that corrects it.
+- **To count events** ("how many doses this week?"), recall with `current: true`; `total` is the count. Claude used to be told to count each wrong record and its correction once, from the correction, but a correction that moved the event out of the range doesn't come back, so Claude couldn't tell (issue #9). The server now does the leaving out.
 - **A record with `corrects` replaced an earlier one.** Fetch the original with `ids` if you need its context.
 - **Choosing the time anchor:**
   - `created_at` is when it was saved; use it for "the latest version" of a name (its head).
@@ -350,6 +352,7 @@ Nothing else can change. Ids, record names, times, correction links and slugs ar
   - `occurred_at` orders by event time;
   - `relevance` without a `query` is refused;
   - both directions work, including ties.
+- **`current: true`:** a dose corrected out of the range counts zero, one corrected into it counts once, a corrected-then-retracted dose counts zero, a chain counts only its last record; it pages, and its tokens don't work without it.
 - **Links on every result:** `corrected_by` and `corrected_kind` are present on wrong records in every kind of query (`ids`, `query`, time range).
 - **Time round-trips:**
   - `06:00+07:00` on the 16th is stored exactly as sent, gets `occurred_at_utc` 23:00Z on the 15th, is found by a +07:00 range on the 16th, and is returned unchanged;
@@ -387,6 +390,8 @@ The new repo's README:
 | "Correction for the bank: it was paracetamol, not ibuprofen." | `recall(name=medication, query=ibuprofen, after=2026-10-15T00:00:00+07:00, before=2026-10-16T10:00:00+07:00)` → #57, then `remember(name=medication, corrects=57, kind=correction, description="Paracetamol, not ibuprofen, around 21:00", body="Correction for the bank: it was paracetamol, not ibuprofen.", occurred_at=2026-10-15T21:00:00+07:00)` → #58 |
 | "Actually I never took it, remove that from the bank." | `remember(name=medication, corrects=58, kind=retraction, description="Never took the dose logged around 21:00 on the 15th", body="Actually I never took it, remove that from the bank.", occurred_at=2026-10-16T10:00:00+07:00)` → #59 |
 | "Check the bank: what did I take on the 15th?" | `recall(name=medication, after=2026-10-15T00:00:00+07:00, before=2026-10-16T00:00:00+07:00, direction=oldest)` → #57 (`corrected_by: 58`, correction) and #58 (`corrected_by: 59`, retraction). #59 itself was saved with today's time, so it's outside this range. Answer: nothing was taken. It was first logged as ibuprofen, then corrected to paracetamol, then retracted. |
+| "Correction for the bank: the dose I logged Monday morning was really Sunday morning." | Finds the Monday record (#61), then `remember(name=medication, corrects=61, kind=correction, …, occurred_at=2026-10-11T09:00:00+07:00)` → #62 |
+| "Check the bank: how many doses did I take this week?" | `recall(name=medication, after=2026-10-12T00:00:00+07:00, before=2026-10-19T00:00:00+07:00, current=true)`. #61 has `corrected_by`, so it's left out; #62 happened on Sunday the 11th, so it's outside the range. `total` is the answer, and the dose moved to last week isn't counted. Claude says it read "this week" as Mon 12 – Sun 18 Oct. |
 | "Check the bank: what did I eat last week?" | `recall(name=meals, after=2026-10-05T00:00:00+07:00, before=2026-10-12T00:00:00+07:00, direction=oldest, max_results=20)`, following `next_page_token`. Claude says it read "last week" as Mon 5 – Sun 11 Oct. |
 | "Check the bank: when was my last dose?" | `recall(name=medication, order_by=occurred_at, max_results=1)`. If that record has `corrected_by`, Claude reads on. |
 | "Check the bank: where's my bank project at?" | `list_topics(type=project)` → `memory-bank`, then `recall(name=memory-bank, order_by=created_at, max_results=1)` → the head, with its full body |

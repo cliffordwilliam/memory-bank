@@ -24,7 +24,8 @@ Records are never edited or deleted: every save adds a new record on top of its 
 export const RECALL = `Read records from the user's memory bank, like a GET with filters and pages. ${COMMON}
 
 Everything stored comes back, including records that turned out wrong:
-- A record with corrected_by was wrong (corrected or retracted). Answer from the record that corrects it. When counting ("how many doses this week?"), a wrong record and its correction are the same event: count it once, from the correction. A retracted event counts zero, and a retraction record is never counted.
+- A record with corrected_by was wrong (corrected or retracted). Answer from the record that corrects it.
+- To count events ("how many doses this week?"), recall with current: true. It leaves out wrong records and retractions, so total is the count; a correction comes back on its own when its real time is in the range.
 - A record with corrects replaced an earlier one; fetch that one with ids if you need its context.
 
 Choosing what to sort by:

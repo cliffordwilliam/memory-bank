@@ -244,6 +244,80 @@ describe("recall by filters", () => {
     expect(records[2]).not.toHaveProperty("corrected_by");
   });
 
+  describe("current: true leaves out wrong records and retractions, so total is the count (#9)", () => {
+    // Monday 12 to Sunday 18 October 2026, +07:00.
+    const week = { after: "2026-10-12T00:00:00+07:00", before: "2026-10-19T00:00:00+07:00" };
+    const monday = "2026-10-12T09:00:00+07:00";
+    const sundayBefore = "2026-10-11T09:00:00+07:00";
+
+    it("a dose corrected to the Sunday before drops out of the week", async () => {
+      const name = uniqueName();
+      const wrong = await save({ name, occurred_at: monday });
+      await save({ name, occurred_at: sundayBefore, corrects: wrong.id, kind: "correction" });
+      expect((await recall(db, { name, ...week })).total).toBe(1); // without the filter, the wrong one shows
+      expect(await recall(db, { name, ...week, current: true })).toEqual({ records: [], total: 0 });
+    });
+
+    it("a dose corrected into the week counts once, from the correction", async () => {
+      const name = uniqueName();
+      const wrong = await save({ name, occurred_at: sundayBefore });
+      const fix = await save({ name, occurred_at: monday, corrects: wrong.id, kind: "correction" });
+      const { records, total } = await recall(db, { name, ...week, current: true });
+      expect(total).toBe(1);
+      expect(records.map((r) => r.id)).toEqual([fix.id]);
+    });
+
+    it("a corrected then retracted dose counts zero", async () => {
+      const name = uniqueName();
+      const wrong = await save({ name, occurred_at: monday });
+      const fix = await save({ name, occurred_at: monday, corrects: wrong.id, kind: "correction" });
+      await save({ name, occurred_at: "2026-10-13T09:00:00+07:00", corrects: fix.id, kind: "retraction" });
+      expect((await recall(db, { name, ...week })).total).toBe(3);
+      expect((await recall(db, { name, ...week, current: true })).total).toBe(0);
+    });
+
+    it("a chain counts only its last record", async () => {
+      const name = uniqueName();
+      const a = await save({ name, occurred_at: monday });
+      const b = await save({ name, occurred_at: monday, corrects: a.id, kind: "correction" });
+      const c = await save({ name, occurred_at: monday, corrects: b.id, kind: "correction" });
+      const other = await save({ name, occurred_at: "2026-10-14T09:00:00+07:00" });
+      const { records, total } = await recall(db, { name, ...week, current: true, direction: "oldest" });
+      expect(total).toBe(2);
+      expect(records.map((r) => r.id)).toEqual([c.id, other.id]);
+    });
+
+    it("pages through current records only, and keeps its token to itself", async () => {
+      const name = uniqueName();
+      const ids: number[] = [];
+      for (let i = 0; i < 5; i++) {
+        const wrong = await save({ name, occurred_at: monday });
+        ids.push((await save({ name, occurred_at: monday, corrects: wrong.id, kind: "correction" })).id);
+      }
+      const seen: number[] = [];
+      let token: string | undefined;
+      do {
+        const page = await recall(db, { name, current: true, direction: "oldest", max_results: 2, page_token: token });
+        expect(page.total).toBe(5);
+        seen.push(...page.records.map((r) => r.id));
+        token = page.next_page_token;
+      } while (token);
+      expect(seen).toEqual(ids);
+
+      const first = await recall(db, { name, current: true, max_results: 2 });
+      await expect(recall(db, { name, max_results: 2, page_token: first.next_page_token })).rejects.toThrow(
+        "page_token belongs to a different query",
+      );
+    });
+
+    it("must be true or left out, and can't go with ids", async () => {
+      await expect(recall(db, { current: false })).rejects.toThrow("current: must be true, or left out");
+      await expect(recall(db, { ids: [1], current: true })).rejects.toThrow(
+        "ids can't be combined with other filters (got current)",
+      );
+    });
+  });
+
   it("filters on when it happened: after inclusive, before exclusive, across midnight UTC", async () => {
     const name = uniqueName();
     // 06:00 on the 16th in +07:00 is 23:00 on the 15th in UTC.
